@@ -37,13 +37,81 @@ public class InputRouterTests
     }
 
     [Fact]
-    public void PushAtEdgeClamped_Switches()
+    public void PushAtEdgeClamped_SwitchesOnThirdRepeat()
     {
         var r = NewRouter();
         Assert.False(r.OnMouseMove(0, 500).Block);
+        Assert.False(r.OnMouseMove(0, 500).Block);
+        Assert.False(r.OnMouseMove(0, 500).Block);
+        Assert.Equal("game", r.ActivePcId);
         var res = r.OnMouseMove(0, 500);
         Assert.Equal("stream", r.ActivePcId);
         Assert.Equal(new CursorEnter(1919, 320), Assert.Single(res.ToRemote));
+    }
+
+    [Fact]
+    public void SubPixelJitterAtEdge_DoesNotCross()
+    {
+        // Same-point events broken up by real movement never add up to a push.
+        var r = NewRouter();
+        for (int i = 0; i < 10; i++)
+        {
+            r.OnMouseMove(0, 500);
+            r.OnMouseMove(0, 500);
+            r.OnMouseMove(0, 501);
+        }
+        Assert.Equal("game", r.ActivePcId);
+    }
+
+    [Fact]
+    public void HeldButton_BlocksCrossing()
+    {
+        // Dragging a scrollbar or window against an edge must not jump to the other PC and abort the drag.
+        var r = NewRouter();
+        r.OnButton(MouseButtonKind.Left, true);
+        r.OnMouseMove(0, 500);
+        Assert.False(r.OnMouseMove(-1, 500).Block);
+        Assert.Equal("game", r.ActivePcId);
+        r.OnButton(MouseButtonKind.Left, false);
+        r.OnMouseMove(-1, 500);
+        Assert.Equal("stream", r.ActivePcId);
+    }
+
+    [Fact]
+    public void SessionInterrupted_WhileRemote_ReturnsAndReleases()
+    {
+        var (r, _) = CrossToA();
+        r.OnKey(0x1D, false, true);
+        var res = r.OnSessionInterrupted();
+        Assert.Equal("game", r.ActivePcId);
+        Assert.Equal(new Message[] { new ReleaseAll(), new CursorLeave() }, res.ToRemote);
+        Assert.Contains(new UnparkAndShow(0, 500), res.Local);
+    }
+
+    [Fact]
+    public void SessionInterrupted_OnHost_ForgetsHeldKeys()
+    {
+        var r = NewRouter();
+        r.OnKey(0x1D, false, true);
+        r.OnSessionInterrupted();
+        r.OnMouseMove(0, 500);
+        var cross = r.OnMouseMove(-1, 500);
+        Assert.Empty(Assert.Single(cross.Local.OfType<ReleaseLocalKeys>()).Keys);
+    }
+
+    [Fact]
+    public void Resync_AfterUnlock_AvoidsStaleJump()
+    {
+        // Game PC with a second monitor placed right of C. While locked (no events) the user moved to that monitor.
+        var d2 = new MonitorInfo("game", @"\\.\DISPLAY2", 1920, 1080, 2560, 0, 1.0);
+        var layout = new VirtualLayout(
+            new[] { VirtualLayoutTests.A, VirtualLayoutTests.B, VirtualLayoutTests.C, d2 },
+            new[] { new Placement(VirtualLayoutTests.A.Key, 0, 0), new Placement(VirtualLayoutTests.B.Key, 1920, -180),
+                    new Placement(VirtualLayoutTests.C.Key, 4480, 0), new Placement(d2.Key, 6400, 0) });
+        var r = new InputRouter(layout, "game", new VPoint(100, 100));
+        r.Resync(3000, 500);
+        Assert.False(r.OnMouseMove(3001, 500).Block);
+        Assert.Equal("game", r.ActivePcId);
     }
 
     [Fact]
@@ -85,6 +153,8 @@ public class InputRouterTests
         Assert.False(r.OnMouseMove(0, 500).Block);
         Assert.Equal("game", r.ActivePcId);
         // A real push after that still crosses.
+        r.OnMouseMove(0, 500);
+        r.OnMouseMove(0, 500);
         r.OnMouseMove(0, 500);
         Assert.Equal("stream", r.ActivePcId);
     }
@@ -128,6 +198,7 @@ public class InputRouterTests
     {
         var (r, _) = CrossToA();
         Assert.Equal(new Key(0x1E, false, true), Assert.Single(r.OnKey(0x1E, false, true).ToRemote));
+        Assert.Equal(new Key(0x72, false, true, 0x15), Assert.Single(r.OnKey(0x72, false, true, 0x15).ToRemote)); // 한/영 keeps its VK
         Assert.Equal(new Key(0x1E, false, false), Assert.Single(r.OnKey(0x1E, false, false).ToRemote));
         Assert.Equal(new MouseButton(MouseButtonKind.Left, true), Assert.Single(r.OnButton(MouseButtonKind.Left, true).ToRemote));
         Assert.Equal(new MouseWheel(false, 120), Assert.Single(r.OnWheel(false, 120).ToRemote));

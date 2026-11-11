@@ -11,7 +11,8 @@ public sealed record CursorMove(int OsX, int OsY) : Message;
 public sealed record CursorLeave() : Message;
 public sealed record MouseButton(MouseButtonKind Button, bool Down) : Message;
 public sealed record MouseWheel(bool Horizontal, int Delta) : Message;
-public sealed record Key(ushort ScanCode, bool Extended, bool Down) : Message;
+/// <summary>Vk is kept for keys a scan code cannot express (한/영, 한자, Pause); 0 = use the scan code.</summary>
+public sealed record Key(ushort ScanCode, bool Extended, bool Down, ushort Vk = 0) : Message;
 public sealed record ReleaseAll() : Message;
 public sealed record ClipboardText(string Text) : Message;
 public sealed record ClipboardImage(byte[] Png) : Message;

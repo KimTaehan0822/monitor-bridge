@@ -16,6 +16,7 @@ public class MessageCodecTests
         new MouseButton(MouseButtonKind.X2, true),
         new MouseWheel(true, -120),
         new Key(0x1D, true, false),
+        new Key(0x72, false, true, 0x15),
         new ReleaseAll(),
         new ClipboardText("한글 text 😀"),
         new ClipboardImage(new byte[] { 0x89, 0x50, 0x4E, 0x47 }),

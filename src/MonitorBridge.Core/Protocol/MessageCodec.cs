@@ -25,7 +25,7 @@ public static class MessageCodec
             case CursorLeave: w.Write((byte)4); break;
             case MouseButton x: w.Write((byte)5); w.Write((byte)x.Button); w.Write(x.Down); break;
             case MouseWheel x: w.Write((byte)6); w.Write(x.Horizontal); w.Write(x.Delta); break;
-            case Key x: w.Write((byte)7); w.Write(x.ScanCode); w.Write(x.Extended); w.Write(x.Down); break;
+            case Key x: w.Write((byte)7); w.Write(x.ScanCode); w.Write(x.Extended); w.Write(x.Down); w.Write(x.Vk); break;
             case ReleaseAll: w.Write((byte)8); break;
             case ClipboardText x: w.Write((byte)9); w.Write(x.Text); break;
             case ClipboardImage x: w.Write((byte)10); WriteBytes(w, x.Png); break;
@@ -54,7 +54,7 @@ public static class MessageCodec
                 4 => new CursorLeave(),
                 5 => new MouseButton(ReadEnum(r), r.ReadBoolean()),
                 6 => new MouseWheel(r.ReadBoolean(), r.ReadInt32()),
-                7 => new Key(r.ReadUInt16(), r.ReadBoolean(), r.ReadBoolean()),
+                7 => new Key(r.ReadUInt16(), r.ReadBoolean(), r.ReadBoolean(), r.ReadUInt16()),
                 8 => new ReleaseAll(),
                 9 => new ClipboardText(r.ReadString()),
                 10 => new ClipboardImage(ReadBytes(r)),

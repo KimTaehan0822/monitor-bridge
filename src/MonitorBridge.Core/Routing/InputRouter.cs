@@ -29,7 +29,10 @@ public sealed class InputRouter
     VirtualLayout _layout;
     (int X, int Y) _prevOs;
     (int X, int Y) _park;
-    bool _ignoreNextPush; // our own SetCursorPos can echo back as a same-point move
+    // Windows may clamp hook points at a screen edge, so a push shows up as repeated identical points.
+    // Several in a row are needed, so sub-pixel jitter and our own SetCursorPos echo never cross by accident.
+    const int PushesToCross = 3;
+    int _edgePushes;
     readonly Dictionary<string, VPoint> _last = new();
     readonly HashSet<(ushort, bool)> _heldKeys = new();
     readonly HashSet<MouseButtonKind> _heldButtons = new();
@@ -58,34 +61,50 @@ public sealed class InputRouter
         int dx = x - prev.X, dy = y - prev.Y;
 
         bool samePoint = dx == 0 && dy == 0;
-        bool ignorePush = _ignoreNextPush;
-        _ignoreNextPush = false;
+        var pushDir = samePoint && prevMon is not null ? PushDirection(prevMon, vPrev) : null;
+        _edgePushes = pushDir is null ? 0 : _edgePushes + 1;
         if (v is { } inside)
         {
             var mon = _layout.MonitorAt(inside);
-            if (mon == prevMon && !(samePoint && !ignorePush && prevMon is not null && PushDirection(prevMon, vPrev) is not null))
+            if (mon == prevMon && (pushDir is null || _edgePushes < PushesToCross))
             {
                 Position = inside;
                 return RouterResult.Pass;
             }
-            if (samePoint)
+            if (pushDir is { } d)
             {
-                // Windows clamped the cursor at the edge: treat a repeated point as a push outward.
-                var (px, py) = PushDirection(prevMon!, vPrev)!.Value;
-                (dx, dy) = (px, py);
+                (dx, dy) = d;
+                _edgePushes = 0;
             }
         }
 
         var target = _layout.Move(vPrev, dx, dy);
         var targetMon = _layout.MonitorAt(target)!;
-        if (targetMon.Info.PcId != _hostPcId) return EnterRemote(target, vPrev, prevMon);
+        if (targetMon.Info.PcId != _hostPcId)
+        {
+            // Never cross mid-drag: it would release the button and abort the drag.
+            if (_heldButtons.Count > 0) return StayOnHost(v, vPrev);
+            return EnterRemote(target, vPrev, prevMon);
+        }
         Position = target;
         if (v is { } got && _layout.MonitorAt(got) == targetMon) { Position = got; return RouterResult.Pass; }
-        if (targetMon == prevMon && v is null) return RouterResult.Pass; // pushing an edge with no neighbour
+        if (targetMon == prevMon && v is null) return StayOnHost(v, target); // pushing an edge with no neighbour
         var (_, ox, oy) = _layout.ToOs(target);
         _prevOs = (ox, oy);
-        _ignoreNextPush = true;
+        _edgePushes = 0;
         return new RouterResult(true, Array.Empty<Message>(), new LocalAction[] { new Warp(ox, oy) });
+    }
+
+    /// <summary>The move stays on the host. A point outside every monitor gets clamped by Windows, so remember the clamped point.</summary>
+    RouterResult StayOnHost(VPoint? v, VPoint fallback)
+    {
+        Position = v ?? fallback;
+        if (v is null)
+        {
+            var (_, ox, oy) = _layout.ToOs(Position);
+            _prevOs = (ox, oy);
+        }
+        return RouterResult.Pass;
     }
 
     static (int, int)? PushDirection(PlacedMonitor m, VPoint p)
@@ -130,7 +149,7 @@ public sealed class InputRouter
         Position = hostTarget;
         var (_, ox, oy) = _layout.ToOs(hostTarget);
         _prevOs = (ox, oy);
-        _ignoreNextPush = true;
+        _edgePushes = 0;
         var toRemote = notifyRemote ? new Message[] { new ReleaseAll(), new CursorLeave() } : Array.Empty<Message>();
         return new RouterResult(true, toRemote, new LocalAction[] { new UnparkAndShow(ox, oy) });
     }
@@ -153,11 +172,34 @@ public sealed class InputRouter
     public RouterResult OnWheel(bool horizontal, int delta) =>
         IsRemote ? RouterResult.Forward(new MouseWheel(horizontal, delta)) : RouterResult.Pass;
 
-    public RouterResult OnKey(ushort scan, bool extended, bool down)
+    public RouterResult OnKey(ushort scan, bool extended, bool down, ushort vk = 0)
     {
         if (down) _heldKeys.Add((scan, extended));
         else if (!_heldKeys.Remove((scan, extended))) return IsRemote ? RouterResult.Swallow : RouterResult.Pass;
-        return IsRemote ? RouterResult.Forward(new Key(scan, extended, down)) : RouterResult.Pass;
+        return IsRemote ? RouterResult.Forward(new Key(scan, extended, down, vk)) : RouterResult.Pass;
+    }
+
+    /// <summary>Host point the hidden cursor is held at while remote.</summary>
+    public (int X, int Y) ParkPoint => _park;
+
+    /// <summary>
+    /// Lock screen, Ctrl+Alt+Del or a session switch: key-ups happen where the hooks cannot see them.
+    /// Return to the host and forget every held key so nothing stays pressed on either PC.
+    /// </summary>
+    public RouterResult OnSessionInterrupted()
+    {
+        if (IsRemote) return LeaveRemote(LastOrCenter(_hostPcId), notifyRemote: true);
+        TakeHeld();
+        return RouterResult.Pass;
+    }
+
+    /// <summary>Re-reads the real host cursor after a period without hook events (lock mode).</summary>
+    public void Resync(int osX, int osY)
+    {
+        if (IsRemote) return;
+        _prevOs = (osX, osY);
+        _edgePushes = 0;
+        Position = _layout.FromOs(_hostPcId, osX, osY) ?? Position;
     }
 
     public RouterResult QuickSwitch()
