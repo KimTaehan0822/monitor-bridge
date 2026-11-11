@@ -179,8 +179,16 @@ internal sealed class HotkeyBox : TextBox
     public string Value
     {
         get => _value;
-        set { _value = value; Text = value; }
+        set { _value = value; Text = Pretty(value); }
     }
+
+    static string Pretty(string s) => string.Join("+", s.Split('+').Select(p => p switch
+    {
+        "Oem3" => "`", "Oem5" => "\\", "OemMinus" => "-", "Oemplus" => "=", "Oemcomma" => ",", "OemPeriod" => ".",
+        "Scroll" => "Scroll Lock",
+        _ when p.Length == 2 && p[0] == 'D' && char.IsDigit(p[1]) => p[1..],
+        _ => p,
+    }));
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
