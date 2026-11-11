@@ -13,6 +13,40 @@ static class Program
         ApplicationConfiguration.Initialize();
         CursorHider.Restore();
         if (args.Contains("--selftest")) { SelfTest(); return; }
+        int auto = Array.IndexOf(args, "--autostart");
+        if (auto >= 0 && auto + 1 < args.Length) { Environment.Exit(UI.AutoStart.ApplyElevated(args[auto + 1] == "on") ? 0 : 1); return; }
+        int render = Array.IndexOf(args, "--render-settings");
+        if (render >= 0 && render + 1 < args.Length) { RenderSettings(args[render + 1]); return; }
+
+        using var mutex = new Mutex(true, "MonitorBridge.SingleInstance", out bool first);
+        if (!first)
+        {
+            MessageBox.Show("Monitor Bridge가 이미 실행 중이에요. 작업 표시줄 오른쪽 아이콘을 확인해 주세요.", "Monitor Bridge");
+            return;
+        }
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => { CursorHider.Restore(); if (e.ExceptionObject is Exception ex) Log.Error(ex); };
+        Application.ThreadException += (_, e) => Log.Error(e.Exception);
+        Application.ApplicationExit += (_, _) => CursorHider.Restore();
+        Application.Run(new UI.TrayContext(Core.Config.AppConfig.Load(Core.Config.AppConfig.DefaultPath)));
+    }
+
+    /// <summary>Renders the settings window with a sample layout to a PNG (for visual review).</summary>
+    static void RenderSettings(string path)
+    {
+        var game = new Core.Layout.MonitorInfo("game", @"\\.\DISPLAY1", 2560, 1440, 0, 0, 1.25);
+        var s1 = new Core.Layout.MonitorInfo("stream", @"\\.\DISPLAY1", 1920, 1080, 0, 0, 1);
+        var s2 = new Core.Layout.MonitorInfo("stream", @"\\.\DISPLAY2", 1920, 1080, 1920, 0, 1);
+        var layout = new Core.Layout.VirtualLayout(new[] { s1, game, s2 }, new[]
+        {
+            new Core.Layout.Placement(s1.Key, 0, 180), new Core.Layout.Placement(game.Key, 1920, 0), new Core.Layout.Placement(s2.Key, 4480, 180),
+        });
+        var cfg = new Core.Config.AppConfig { Password = "x", ReceiverAddress = "192.168.0.10" };
+        using var form = new UI.SettingsForm(cfg, layout, "game", remoteConnected: true) { StartPosition = FormStartPosition.Manual, Location = new Point(-10000, -10000) };
+        form.Show();
+        Application.DoEvents();
+        using var bmp = new Bitmap(form.Width, form.Height);
+        form.DrawToBitmap(bmp, new Rectangle(Point.Empty, form.Size));
+        bmp.Save(path);
     }
 
     /// <summary>Hardware checks that unit tests cannot do. Writes %TEMP%\MonitorBridge-selftest.txt.</summary>
