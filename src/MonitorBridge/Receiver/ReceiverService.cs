@@ -56,6 +56,7 @@ internal sealed class ReceiverService : IDisposable
     async Task Serve(TcpClient tcp, CancellationToken ct)
     {
         tcp.NoDelay = true;
+        tcp.SendBufferSize = 64 * 1024;
         PeerConnection conn;
         try
         {
@@ -63,10 +64,11 @@ internal sealed class ReceiverService : IDisposable
             hs.CancelAfter(TimeSpan.FromSeconds(10));
             conn = new PeerConnection(await SecureChannel.AcceptAsync(tcp.GetStream(), _cfg.Password, hs.Token));
         }
-        catch (AuthenticationException)
+        catch (AuthenticationException e)
         {
-            Log.Info($"rejected {tcp.Client.RemoteEndPoint}: wrong password");
-            _notify("다른 비밀번호로 연결하려는 시도가 있었어요. 게임컴 설정을 확인해 주세요.");
+            Log.Info($"rejected {tcp.Client.RemoteEndPoint}: {e.Message}");
+            // A dropped handshake (port scanner, network blip) is not a password problem; only a real mismatch is reported.
+            if (e.InnerException is null) _notify("다른 비밀번호로 연결하려는 시도가 있었어요. 게임컴 설정을 확인해 주세요.");
             tcp.Dispose();
             return;
         }
@@ -106,7 +108,7 @@ internal sealed class ReceiverService : IDisposable
             case CursorLeave: CursorHider.Hide(); break;
             case MouseButton b: _injector.Button(b.Button, b.Down); break;
             case MouseWheel w: _injector.Wheel(w.Horizontal, w.Delta); break;
-            case Key k: _injector.Key(k.ScanCode, k.Extended, k.Down); break;
+            case Key k: _injector.Key(k.ScanCode, k.Extended, k.Down, k.Vk); break;
             case ReleaseAll: _injector.ReleaseAll(); break;
             default: MessageReceived?.Invoke(m); break;
         }

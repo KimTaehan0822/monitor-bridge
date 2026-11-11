@@ -89,6 +89,16 @@ internal static class Win32
     [DllImport("user32.dll", SetLastError = true)] public static extern bool RegisterHotKey(IntPtr hwnd, int id, uint mods, uint vk);
     [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hwnd, int id);
 
+    [StructLayout(LayoutKind.Sequential)]
+    struct LASTINPUTINFO { public uint cbSize, dwTime; }
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+    /// <summary>GetTickCount value of the last input event the system saw; 0 on failure.</summary>
+    public static uint LastInputTick()
+    {
+        var i = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        return GetLastInputInfo(ref i) ? i.dwTime : 0;
+    }
+
     // ---- clipboard ----
     public const int WM_CLIPBOARDUPDATE = 0x31D, WM_DISPLAYCHANGE = 0x7E;
     [DllImport("user32.dll", SetLastError = true)] public static extern bool AddClipboardFormatListener(IntPtr hwnd);

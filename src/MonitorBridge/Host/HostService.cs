@@ -24,10 +24,12 @@ internal sealed class HostService : IDisposable
     readonly LowLevelHooks _hooks;
     readonly InputInjector _local = new();
     readonly HotkeyMatcher? _lock, _quick;
+    readonly System.Threading.Timer _watchdog;
     InputRouter _router;
     IReadOnlyList<MonitorInfo> _remoteMonitors = Array.Empty<MonitorInfo>();
+    HashSet<string> _missingNotified = new();
     volatile PeerConnection? _conn;
-    bool _locked;
+    volatile bool _locked;
 
     public event Action<HostStatus>? StatusChanged;
     public event Action<Message>? MessageReceived;
@@ -46,12 +48,15 @@ internal sealed class HostService : IDisposable
         _router = new InputRouter(Layout, MonitorEnumerator.PcId, new VPoint(p.X, p.Y));
         _hooks = new LowLevelHooks(Handle);
         _hooks.HotkeyPressed += Unlock;
+        _watchdog = new System.Threading.Timer(_ => CheckHooks(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
     public void Start()
     {
         _hooks.Install();
         SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
+        _watchdog.Change(2000, 2000);
         _ = Task.Run(() => ConnectLoop(_cts.Token));
         StatusChanged?.Invoke(HostStatus.Disconnected);
     }
@@ -65,13 +70,16 @@ internal sealed class HostService : IDisposable
         {
             try
             {
-                using var tcp = new TcpClient { NoDelay = true };
+                // A small send buffer keeps input frames from queueing behind megabytes of bulk data inside TCP.
+                using var tcp = new TcpClient { NoDelay = true, SendBufferSize = 64 * 1024 };
+                SecureChannel ch;
                 using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
                 {
                     timeout.CancelAfter(TimeSpan.FromSeconds(3));
                     await tcp.ConnectAsync(_cfg.ReceiverAddress, _cfg.Port, timeout.Token);
+                    timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                    ch = await SecureChannel.ConnectAsync(tcp.GetStream(), _cfg.Password, timeout.Token);
                 }
-                var ch = await SecureChannel.ConnectAsync(tcp.GetStream(), _cfg.Password, ct);
                 var conn = new PeerConnection(ch);
                 conn.Received += OnReceived;
                 _conn = conn;
@@ -113,6 +121,14 @@ internal sealed class HostService : IDisposable
 
     void OnDisplayChanged(object? sender, EventArgs e) => ApplyLayout();
 
+    void OnSessionSwitch(object? sender, SessionSwitchEventArgs e) => _hooks.Invoke(() =>
+    {
+        // Key-ups typed on the lock screen never reach the hooks; start clean on both PCs.
+        _lock?.Reset();
+        _quick?.Reset();
+        Execute(_router.OnSessionInterrupted());
+    });
+
     /// <summary>Rebuilds the layout from current monitors and saved placements; persists placements for new monitors.</summary>
     public void ApplyLayout(IEnumerable<Placement>? placements = null)
     {
@@ -124,11 +140,13 @@ internal sealed class HostService : IDisposable
         if (placements is not null) _cfg.Placements = placements.ToList();
         var layout = BuildLayout();
         var known = layout.Monitors.Select(m => m.Info.Key).ToHashSet();
-        var lost = _cfg.Placements.Where(p => !known.Contains(p.Key)).ToList();
-        if (lost.Count > 0 && _remoteMonitors.Count > 0)
-            _notify($"모니터 {lost.Count}대를 찾지 못해서 배치에서 뺐어요.");
-        // Keep placements of monitors that are only temporarily absent (e.g. receiver offline).
-        _cfg.Placements = layout.ToPlacements().Concat(_remoteMonitors.Count > 0 ? Enumerable.Empty<Placement>() : lost).ToList();
+        var missing = _cfg.Placements.Where(p => !known.Contains(p.Key)).ToList();
+        // Monitors that sleep or power off disappear for a while: keep their spot so they come back where they were.
+        _cfg.Placements = layout.ToPlacements().Concat(missing).ToList();
+        var missingKeys = missing.Select(p => p.Key).ToHashSet();
+        if (_remoteMonitors.Count > 0 && missing.Count > 0 && !missingKeys.SetEquals(_missingNotified))
+            _notify($"모니터 {missing.Count}대가 보이지 않아요. 다시 켜지면 원래 자리로 돌아와요.");
+        _missingNotified = missingKeys;
         try { _cfg.Save(AppConfig.DefaultPath); } catch (Exception ex) { Log.Error(ex); }
         Layout = layout;
         _hooks.Invoke(() => Execute(_router.OnLayoutChanged(layout)));
@@ -144,11 +162,17 @@ internal sealed class HostService : IDisposable
             case HookKey k:
                 bool lockHit = _lock?.OnKey(k.Vk, k.Down) == true;
                 bool quickHit = _quick?.OnKey(k.Vk, k.Down) == true;
-                if (lockHit && !_router.IsRemote) { Lock(); return true; }
-                if (lockHit) return false; // spec: lock only on the game PC; elsewhere the key is ignored
+                // Lock works only on the game PC; on the stream PC the key is swallowed so nothing sticks anywhere.
+                if (lockHit) { if (!_router.IsRemote) Lock(); return true; }
                 if (quickHit) { Execute(_router.QuickSwitch()); return true; }
-                return Execute(_router.OnKey(k.Scan, k.Extended, k.Down));
-            case HookMouseMove mv: return Execute(_router.OnMouseMove(mv.X, mv.Y));
+                return Execute(_router.OnKey(k.Scan, k.Extended, k.Down, (ushort)k.Vk));
+            case HookMouseMove mv:
+                if (!_router.IsRemote) return Execute(_router.OnMouseMove(mv.X, mv.Y));
+                // Measure from where the hidden cursor really is: a game may have moved it with SetCursorPos.
+                Win32.GetCursorPos(out var cur);
+                var park = _router.ParkPoint;
+                if (cur.X != park.X || cur.Y != park.Y) Win32.SetCursorPos(park.X, park.Y);
+                return Execute(_router.OnMouseMove(park.X + (mv.X - cur.X), park.Y + (mv.Y - cur.Y)));
             case HookMouseButton b: return Execute(_router.OnButton(b.Button, b.Down));
             case HookMouseWheel w: return Execute(_router.OnWheel(w.Horizontal, w.Delta));
             default: return false;
@@ -167,8 +191,9 @@ internal sealed class HostService : IDisposable
                     foreach (var (scan, ext) in rel.Keys) _local.Key(scan, ext, false);
                     foreach (var b in rel.Buttons) _local.Button(b, false);
                     break;
-                case ParkAndHide p: Win32.SetCursorPos(p.OsX, p.OsY); CursorHider.Hide(); break;
-                case UnparkAndShow u: CursorHider.Restore(); Win32.SetCursorPos(u.OsX, u.OsY); break;
+                // Swapping system cursors is slow (it can read cursor files); run it after the hook callback returns.
+                case ParkAndHide p: Win32.SetCursorPos(p.OsX, p.OsY); _hooks.Invoke(CursorHider.Hide); break;
+                case UnparkAndShow u: Win32.SetCursorPos(u.OsX, u.OsY); _hooks.Invoke(CursorHider.Restore); break;
                 case Warp w: Win32.SetCursorPos(w.OsX, w.OsY); break;
             }
         }
@@ -192,14 +217,39 @@ internal sealed class HostService : IDisposable
     void Unlock()
     {
         _hooks.UnregisterHotkey();
+        _lock?.Reset();
+        _quick?.Reset();
+        // The router saw no moves while locked; start from where the cursor is now.
+        Win32.GetCursorPos(out var p);
+        _router.Resync(p.X, p.Y);
         _hooks.Install();
         _locked = false;
         StatusChanged?.Invoke(_conn is null ? HostStatus.Disconnected : HostStatus.Connected);
     }
 
+    /// <summary>
+    /// Windows silently removes low-level hooks that time out. If input happened that the hooks never saw,
+    /// put them back and bring the cursor home.
+    /// </summary>
+    void CheckHooks()
+    {
+        if (_locked || !_hooks.Installed) return;
+        uint lastInput = Win32.LastInputTick();
+        uint lastHook = unchecked((uint)_hooks.LastCallbackTick);
+        if (lastInput == 0 || unchecked((int)(lastInput - lastHook)) < 1500) return;
+        Log.Info("hooks stopped receiving input; reinstalling");
+        _hooks.Invoke(() =>
+        {
+            _hooks.Reinstall();
+            Execute(_router.OnSessionInterrupted());
+        });
+    }
+
     public void Dispose()
     {
+        _watchdog.Dispose();
         SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
         _cts.Cancel();
         _hooks.Invoke(() => Execute(_router.OnDisconnected()));
         _hooks.Dispose();

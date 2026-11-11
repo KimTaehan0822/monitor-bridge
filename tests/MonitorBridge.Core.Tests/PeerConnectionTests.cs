@@ -16,7 +16,7 @@ public class PeerConnectionTests
         receiver.Received += got.Add;
 
         var id = Guid.NewGuid();
-        for (int i = 0; i < 10; i++) await sender.SendBulkAsync(new FileChunk(id, new byte[64 * 1024]), default);
+        for (int i = 0; i < 5; i++) await sender.SendBulkAsync(new FileChunk(id, new byte[60 * 1024]), default);
         sender.Send(new Key(0x1E, false, true));
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));

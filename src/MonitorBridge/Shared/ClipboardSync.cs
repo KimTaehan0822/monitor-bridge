@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Channels;
 using MonitorBridge.Core.Clipboard;
 using MonitorBridge.Core.Net;
 using MonitorBridge.Core.Protocol;
@@ -19,6 +20,9 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
     readonly SynchronizationContext _ui;
     readonly ClipboardEcho _echo = new();
     readonly FileTransfer _files;
+    // Disk work must not run on the network read loop that also carries cursor moves.
+    // shortcut: unbounded, relies on disk being faster than the LAN; bound it if slow disks show memory growth.
+    readonly Channel<Message> _fileQueue = Channel.CreateUnbounded<Message>(new UnboundedChannelOptions { SingleReader = true });
 
     public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, Action<string> notify)
     {
@@ -27,6 +31,11 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
         _files = new FileTransfer(fileLimitBytes, notify, paths => _ui.Post(_ => SetFiles(paths), null));
         CreateHandle(new CreateParams { Parent = new IntPtr(-3) }); // HWND_MESSAGE: invisible message-only window
         Win32.AddClipboardFormatListener(Handle);
+        _ = Task.Run(async () =>
+        {
+            await foreach (var m in _fileQueue.Reader.ReadAllAsync())
+                try { _files.OnMessage(m); } catch (Exception e) { Log.Error(e); }
+        });
     }
 
     protected override void WndProc(ref System.Windows.Forms.Message m)
@@ -87,7 +96,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
         {
             case ClipboardText t: _ui.Post(_ => SetText(t.Text), null); break;
             case ClipboardImage i: _ui.Post(_ => SetImage(i.Png), null); break;
-            case FileOfferStart or FileEntry or FileChunk or FileOfferEnd or FileCancel: _files.OnMessage(m); break;
+            case FileOfferStart or FileEntry or FileChunk or FileOfferEnd or FileCancel: _fileQueue.Writer.TryWrite(m); break;
         }
     }
 
@@ -133,6 +142,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
 
     public void Dispose()
     {
+        _fileQueue.Writer.TryComplete();
         Win32.RemoveClipboardFormatListener(Handle);
         DestroyHandle();
     }

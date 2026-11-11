@@ -10,7 +10,7 @@ namespace MonitorBridge.Shared;
 /// </summary>
 internal sealed class FileTransfer
 {
-    public const int ChunkSize = 64 * 1024;
+    public const int ChunkSize = 60 * 1024; // fits one 64KB fragment with its header
     public static readonly string TempRoot = Path.Combine(Path.GetTempPath(), "MonitorBridge");
 
     readonly Func<long> _limitBytes;

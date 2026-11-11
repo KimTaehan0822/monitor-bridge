@@ -30,6 +30,18 @@ public class HotkeyTests
     public void Parse_Invalid_False(string s) => Assert.False(Hotkey.TryParse(s, out _));
 
     [Fact]
+    public void Matcher_Reset_ForgetsStuckModifiers()
+    {
+        // After Ctrl+Alt+Del the key-ups never reach the hook; plain ` must not fire the quick switch.
+        Assert.True(Hotkey.TryParse("Ctrl+Alt+Oem3", out var h));
+        var m = new HotkeyMatcher(h);
+        m.OnKey(0xA2, true);
+        m.OnKey(0xA4, true);
+        m.Reset();
+        Assert.False(m.OnKey(0xC0, true));
+    }
+
+    [Fact]
     public void Matcher_FiresOnlyWithModifiers()
     {
         Assert.True(Hotkey.TryParse("Ctrl+Alt+Oem3", out var h));

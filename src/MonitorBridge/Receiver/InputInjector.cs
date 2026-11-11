@@ -7,7 +7,7 @@ namespace MonitorBridge.Receiver;
 /// <summary>Injects input with SendInput and remembers what is held so it can all be released.</summary>
 internal sealed class InputInjector
 {
-    readonly HashSet<(ushort, bool)> _keys = new();
+    readonly HashSet<(ushort, bool, ushort)> _keys = new();
     readonly HashSet<MouseButtonKind> _buttons = new();
     readonly object _gate = new();
 
@@ -39,20 +39,24 @@ internal sealed class InputInjector
     public void Wheel(bool horizontal, int delta) =>
         Mouse(0, 0, unchecked((uint)delta), horizontal ? Win32.MOUSEEVENTF_HWHEEL : Win32.MOUSEEVENTF_WHEEL);
 
-    public void Key(ushort scan, bool extended, bool down)
+    // 한/영, 한자, Pause and NumLock cannot be told apart (or typed at all) by scan code alone.
+    static readonly HashSet<ushort> VkOnly = new() { 0x15, 0x19, 0x13, 0x90 };
+
+    public void Key(ushort scan, bool extended, bool down, ushort vk = 0)
     {
-        lock (_gate) { if (down) _keys.Add((scan, extended)); else _keys.Remove((scan, extended)); }
-        uint flags = Win32.KEYEVENTF_SCANCODE | (extended ? Win32.KEYEVENTF_EXTENDEDKEY : 0) | (down ? 0 : Win32.KEYEVENTF_KEYUP);
-        var input = new Win32.INPUT { type = Win32.INPUT_KEYBOARD, u = new Win32.InputUnion { ki = new Win32.KEYBDINPUT { wScan = scan, dwFlags = flags } } };
+        lock (_gate) { if (down) _keys.Add((scan, extended, vk)); else _keys.Remove((scan, extended, vk)); }
+        bool byVk = vk != 0 && (scan == 0 || VkOnly.Contains(vk));
+        uint flags = (byVk ? 0 : Win32.KEYEVENTF_SCANCODE) | (extended ? Win32.KEYEVENTF_EXTENDEDKEY : 0) | (down ? 0 : Win32.KEYEVENTF_KEYUP);
+        var input = new Win32.INPUT { type = Win32.INPUT_KEYBOARD, u = new Win32.InputUnion { ki = new Win32.KEYBDINPUT { wVk = byVk ? vk : (ushort)0, wScan = scan, dwFlags = flags } } };
         Win32.SendInput(1, new[] { input }, Marshal.SizeOf<Win32.INPUT>());
     }
 
     public void ReleaseAll()
     {
-        (ushort, bool)[] keys;
+        (ushort, bool, ushort)[] keys;
         MouseButtonKind[] buttons;
         lock (_gate) { keys = _keys.ToArray(); buttons = _buttons.ToArray(); }
-        foreach (var (s, e) in keys) Key(s, e, false);
+        foreach (var (s, e, v) in keys) Key(s, e, false, v);
         foreach (var b in buttons) Button(b, false);
     }
 

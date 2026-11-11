@@ -32,6 +32,9 @@ internal sealed class LowLevelHooks : IDisposable
     readonly Win32.HookProc _mouseProc, _keyProc;
 
     public event Action? HotkeyPressed;
+    int _lastCallbackTick = Environment.TickCount;
+    /// <summary>Environment.TickCount of the last hook callback (injected events included).</summary>
+    public int LastCallbackTick => Volatile.Read(ref _lastCallbackTick);
     public bool Installed => _mouseHook != IntPtr.Zero;
 
     public LowLevelHooks(Func<HookEvent, bool> handler)
@@ -50,15 +53,19 @@ internal sealed class LowLevelHooks : IDisposable
         Win32.PostThreadMessage(_threadId, MsgInvoke, IntPtr.Zero, IntPtr.Zero);
     }
 
-    public void Install() => Invoke(() =>
+    public void Install() => Invoke(() => { if (!Installed) Reinstall(); });
+
+    public void Uninstall() => Invoke(UninstallNow);
+
+    /// <summary>Hook thread only.</summary>
+    public void Reinstall()
     {
-        if (Installed) return;
+        UninstallNow();
         var mod = Win32.GetModuleHandle(null);
         _mouseHook = Win32.SetWindowsHookEx(Win32.WH_MOUSE_LL, _mouseProc, mod, 0);
         _keyHook = Win32.SetWindowsHookEx(Win32.WH_KEYBOARD_LL, _keyProc, mod, 0);
-    });
-
-    public void Uninstall() => Invoke(UninstallNow);
+        Volatile.Write(ref _lastCallbackTick, Environment.TickCount);
+    }
 
     void UninstallNow()
     {
@@ -97,6 +104,7 @@ internal sealed class LowLevelHooks : IDisposable
 
     IntPtr MouseProc(int code, IntPtr wParam, IntPtr lParam)
     {
+        Volatile.Write(ref _lastCallbackTick, Environment.TickCount);
         if (code >= 0)
         {
             var s = Marshal.PtrToStructure<Win32.MSLLHOOKSTRUCT>(lParam);
@@ -125,6 +133,7 @@ internal sealed class LowLevelHooks : IDisposable
 
     IntPtr KeyProc(int code, IntPtr wParam, IntPtr lParam)
     {
+        Volatile.Write(ref _lastCallbackTick, Environment.TickCount);
         if (code >= 0)
         {
             var s = Marshal.PtrToStructure<Win32.KBDLLHOOKSTRUCT>(lParam);

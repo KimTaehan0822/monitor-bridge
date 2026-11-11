@@ -16,7 +16,8 @@ public sealed class SecureChannel : IAsyncDisposable
     static readonly byte[] Salt = Encoding.UTF8.GetBytes("MonitorBridge-v1");
 
     readonly Stream _stream;
-    readonly AesGcm _aes;
+    // One instance per direction: the sender and the reader run on different threads at the same time.
+    readonly AesGcm _sendAes, _recvAes;
     readonly byte _sendDir, _recvDir;
     ulong _sendCounter, _recvCounter;
     readonly SemaphoreSlim _sendLock = new(1, 1);
@@ -24,7 +25,8 @@ public sealed class SecureChannel : IAsyncDisposable
     SecureChannel(Stream stream, byte[] key, byte sendDir)
     {
         _stream = stream;
-        _aes = new AesGcm(key, TagSize);
+        _sendAes = new AesGcm(key, TagSize);
+        _recvAes = new AesGcm(key, TagSize);
         _sendDir = sendDir;
         _recvDir = (byte)(1 - sendDir);
     }
@@ -92,7 +94,7 @@ public sealed class SecureChannel : IAsyncDisposable
         var nonce = frame.AsSpan(4, NonceSize);
         nonce[0] = _sendDir;
         BinaryPrimitives.WriteUInt64LittleEndian(nonce[4..], ++_sendCounter);
-        _aes.Encrypt(nonce, plaintext, frame.AsSpan(4 + NonceSize, plaintext.Length), frame.AsSpan(frame.Length - TagSize));
+        _sendAes.Encrypt(nonce, plaintext, frame.AsSpan(4 + NonceSize, plaintext.Length), frame.AsSpan(frame.Length - TagSize));
     }
 
     /// <summary>Only one reader at a time.</summary>
@@ -114,14 +116,15 @@ public sealed class SecureChannel : IAsyncDisposable
         if (nonce[0] != _recvDir || nonce[1] != 0 || nonce[2] != 0 || nonce[3] != 0) throw new InvalidDataException("Bad frame direction");
         if (counter <= _recvCounter) throw new InvalidDataException("Replayed frame");
         var plain = new byte[body.Length - NonceSize - TagSize];
-        _aes.Decrypt(nonce, body.AsSpan(NonceSize, plain.Length), body.AsSpan(body.Length - TagSize), plain);
+        _recvAes.Decrypt(nonce, body.AsSpan(NonceSize, plain.Length), body.AsSpan(body.Length - TagSize), plain);
         _recvCounter = counter;
         return plain;
     }
 
     public ValueTask DisposeAsync()
     {
-        _aes.Dispose();
+        _sendAes.Dispose();
+        _recvAes.Dispose();
         return _stream.DisposeAsync();
     }
 }

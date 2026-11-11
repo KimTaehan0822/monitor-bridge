@@ -65,6 +65,9 @@ public sealed class HotkeyMatcher(Hotkey hotkey)
 
     public Hotkey Hotkey { get; } = hotkey;
 
+    /// <summary>Forget key state, e.g. after a lock screen hid the key-ups from the hook.</summary>
+    public void Reset() => _ctrl = _alt = _shift = _win = _targetDown = false;
+
     public bool OnKey(int vk, bool down)
     {
         switch (vk)

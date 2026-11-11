@@ -12,7 +12,8 @@ public sealed class PeerConnection : IAsyncDisposable
 {
     readonly SecureChannel _ch;
     readonly TimeSpan _pingInterval, _timeout;
-    public const int FragmentSize = 256 * 1024;
+    // Small pieces plus a small socket send buffer keep input from waiting behind bulk data inside TCP.
+    public const int FragmentSize = 64 * 1024;
     public const int MaxMessage = 128 * 1024 * 1024;
     const byte Whole = 0, Fragment = 1, Last = 2;
 
