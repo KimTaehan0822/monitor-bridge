@@ -29,6 +29,7 @@ public sealed class InputRouter
     VirtualLayout _layout;
     (int X, int Y) _prevOs;
     (int X, int Y) _park;
+    bool _ignoreNextPush; // our own SetCursorPos can echo back as a same-point move
     readonly Dictionary<string, VPoint> _last = new();
     readonly HashSet<(ushort, bool)> _heldKeys = new();
     readonly HashSet<MouseButtonKind> _heldButtons = new();
@@ -56,11 +57,13 @@ public sealed class InputRouter
         var v = _layout.FromOs(_hostPcId, x, y);
         int dx = x - prev.X, dy = y - prev.Y;
 
+        bool samePoint = dx == 0 && dy == 0;
+        bool ignorePush = _ignoreNextPush;
+        _ignoreNextPush = false;
         if (v is { } inside)
         {
-            bool samePoint = dx == 0 && dy == 0;
             var mon = _layout.MonitorAt(inside);
-            if (mon == prevMon && !(samePoint && prevMon is not null && PushDirection(prevMon, vPrev) is not null))
+            if (mon == prevMon && !(samePoint && !ignorePush && prevMon is not null && PushDirection(prevMon, vPrev) is not null))
             {
                 Position = inside;
                 return RouterResult.Pass;
@@ -81,6 +84,7 @@ public sealed class InputRouter
         if (targetMon == prevMon && v is null) return RouterResult.Pass; // pushing an edge with no neighbour
         var (_, ox, oy) = _layout.ToOs(target);
         _prevOs = (ox, oy);
+        _ignoreNextPush = true;
         return new RouterResult(true, Array.Empty<Message>(), new LocalAction[] { new Warp(ox, oy) });
     }
 
@@ -126,6 +130,7 @@ public sealed class InputRouter
         Position = hostTarget;
         var (_, ox, oy) = _layout.ToOs(hostTarget);
         _prevOs = (ox, oy);
+        _ignoreNextPush = true;
         var toRemote = notifyRemote ? new Message[] { new ReleaseAll(), new CursorLeave() } : Array.Empty<Message>();
         return new RouterResult(true, toRemote, new LocalAction[] { new UnparkAndShow(ox, oy) });
     }

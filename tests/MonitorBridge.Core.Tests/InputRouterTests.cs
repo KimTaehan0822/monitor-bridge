@@ -76,6 +76,20 @@ public class InputRouterTests
     }
 
     [Fact]
+    public void ReturningOntoHostEdge_DoesNotBounceBack()
+    {
+        // Coming back from A by 1px lands on B's left edge pixel; the echo of our own SetCursorPos must not push back out.
+        var (r, _) = CrossToA();
+        var back = r.OnMouseMove(1281, 720);
+        Assert.Contains(new UnparkAndShow(0, 500), back.Local);
+        Assert.False(r.OnMouseMove(0, 500).Block);
+        Assert.Equal("game", r.ActivePcId);
+        // A real push after that still crosses.
+        r.OnMouseMove(0, 500);
+        Assert.Equal("stream", r.ActivePcId);
+    }
+
+    [Fact]
     public void RemoteToOtherRemoteMonitorAcrossHost_GoesThroughHost()
     {
         // From A, heading right never jumps straight to C (the stream PC's own Windows layout has A next to C).
