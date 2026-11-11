@@ -5,13 +5,21 @@ namespace MonitorBridge.Core.Net;
 
 /// <summary>
 /// Message pump over a <see cref="SecureChannel"/>. Input messages always go out before queued bulk (file) messages.
+/// Each frame starts with a kind byte: 0 = whole message, 1 = fragment, 2 = last fragment. Only bulk messages fragment,
+/// so input can slip in between the pieces of a large clipboard image.
 /// </summary>
 public sealed class PeerConnection : IAsyncDisposable
 {
     readonly SecureChannel _ch;
     readonly TimeSpan _pingInterval, _timeout;
-    readonly Channel<Message> _high = Channel.CreateUnbounded<Message>();
-    readonly Channel<Message> _bulk = Channel.CreateBounded<Message>(16);
+    public const int FragmentSize = 256 * 1024;
+    public const int MaxMessage = 128 * 1024 * 1024;
+    const byte Whole = 0, Fragment = 1, Last = 2;
+
+    readonly Channel<byte[]> _high = Channel.CreateUnbounded<byte[]>();
+    readonly Channel<byte[]> _bulk = Channel.CreateBounded<byte[]>(16);
+    readonly SemaphoreSlim _bulkOrder = new(1, 1);
+    MemoryStream? _partial;
     long _lastReceivedTicks = Environment.TickCount64;
     int _closed;
 
@@ -28,10 +36,38 @@ public sealed class PeerConnection : IAsyncDisposable
     public bool IsClosed => Volatile.Read(ref _closed) == 1;
 
     /// <summary>Non-blocking; safe to call from a hook callback.</summary>
-    public void Send(Message m) => _high.Writer.TryWrite(m);
+    public void Send(Message m)
+    {
+        var body = MessageCodec.Encode(m);
+        if (body.Length > FragmentSize) throw new ArgumentException("Large messages must use SendBulkAsync");
+        _high.Writer.TryWrite(Frame(Whole, body, 0, body.Length));
+    }
 
     /// <summary>Waits while the bulk queue is full, so a large file never sits in memory all at once.</summary>
-    public ValueTask SendBulkAsync(Message m, CancellationToken ct) => _bulk.Writer.WriteAsync(m, ct);
+    public async ValueTask SendBulkAsync(Message m, CancellationToken ct)
+    {
+        var body = MessageCodec.Encode(m);
+        if (body.Length > MaxMessage) throw new ArgumentException("Message too large");
+        await _bulkOrder.WaitAsync(ct);
+        try
+        {
+            if (body.Length <= FragmentSize) { await _bulk.Writer.WriteAsync(Frame(Whole, body, 0, body.Length), ct); return; }
+            for (int off = 0; off < body.Length; off += FragmentSize)
+            {
+                int n = Math.Min(FragmentSize, body.Length - off);
+                await _bulk.Writer.WriteAsync(Frame(off + n == body.Length ? Last : Fragment, body, off, n), ct);
+            }
+        }
+        finally { _bulkOrder.Release(); }
+    }
+
+    static byte[] Frame(byte kind, byte[] body, int offset, int count)
+    {
+        var f = new byte[count + 1];
+        f[0] = kind;
+        Buffer.BlockCopy(body, offset, f, 1, count);
+        return f;
+    }
 
     public async Task RunAsync(CancellationToken ct)
     {
@@ -53,9 +89,9 @@ public sealed class PeerConnection : IAsyncDisposable
     {
         while (!ct.IsCancellationRequested)
         {
-            if (_high.Reader.TryRead(out var m) || _bulk.Reader.TryRead(out m))
+            if (_high.Reader.TryRead(out var f) || _bulk.Reader.TryRead(out f))
             {
-                await _ch.SendAsync(MessageCodec.Encode(m), ct);
+                await _ch.SendAsync(f, ct);
                 continue;
             }
             await Task.WhenAny(_high.Reader.WaitToReadAsync(ct).AsTask(), _bulk.Reader.WaitToReadAsync(ct).AsTask());
@@ -66,8 +102,24 @@ public sealed class PeerConnection : IAsyncDisposable
     {
         while (!ct.IsCancellationRequested)
         {
-            var m = MessageCodec.Decode(await _ch.ReceiveAsync(ct));
+            var f = await _ch.ReceiveAsync(ct);
             Interlocked.Exchange(ref _lastReceivedTicks, Environment.TickCount64);
+            if (f.Length == 0) throw new InvalidDataException("Empty frame");
+            byte[] body;
+            switch (f[0])
+            {
+                case Whole: body = f[1..]; break;
+                case Fragment or Last:
+                    _partial ??= new MemoryStream();
+                    if (_partial.Length + f.Length - 1 > MaxMessage) throw new InvalidDataException("Message too large");
+                    _partial.Write(f, 1, f.Length - 1);
+                    if (f[0] == Fragment) continue;
+                    body = _partial.ToArray();
+                    _partial = null;
+                    break;
+                default: throw new InvalidDataException("Bad frame kind");
+            }
+            var m = MessageCodec.Decode(body);
             if (m is not Ping) Received?.Invoke(m);
         }
     }

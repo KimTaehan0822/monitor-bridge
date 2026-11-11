@@ -19,6 +19,7 @@ internal sealed class TrayContext : ApplicationContext
     HostService? _host;
     ReceiverService? _receiver;
     SettingsForm? _settings;
+    ClipboardSync? _clipboard;
 
     public TrayContext(AppConfig cfg)
     {
@@ -38,16 +39,19 @@ internal sealed class TrayContext : ApplicationContext
     {
         try
         {
+            _clipboard = new ClipboardSync(() => (_host?.Connection ?? _receiver?.Connection), () => (long)_cfg.FileSizeLimitMB * 1024 * 1024, Notify);
             if (_cfg.Role == Role.Host)
             {
                 _host = new HostService(_cfg, Notify);
                 _host.StatusChanged += s => OnUi(() => SetStatus(s));
+                _host.MessageReceived += _clipboard.OnMessage;
                 _host.Start();
             }
             else
             {
                 _receiver = new ReceiverService(_cfg, Notify);
                 _receiver.ConnectedChanged += c => OnUi(() => SetStatus(c ? HostStatus.Connected : HostStatus.Disconnected));
+                _receiver.MessageReceived += _clipboard.OnMessage;
                 _receiver.Start();
                 SetStatus(HostStatus.Disconnected);
             }
@@ -63,6 +67,8 @@ internal sealed class TrayContext : ApplicationContext
     {
         _host?.Dispose();
         _receiver?.Dispose();
+        _clipboard?.Dispose();
+        _clipboard = null;
         _host = null;
         _receiver = null;
     }

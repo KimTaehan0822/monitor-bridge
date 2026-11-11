@@ -34,6 +34,31 @@ public class PeerConnectionTests
     }
 
     [Fact]
+    public async Task LargeBulkMessage_IsReassembled()
+    {
+        var (c, s, _) = await SecureChannelTests.Pair();
+        var sender = new PeerConnection(c);
+        var receiver = new PeerConnection(s);
+        var got = new BlockingCollection<Message>();
+        receiver.Received += got.Add;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _ = sender.RunAsync(cts.Token);
+        _ = receiver.RunAsync(cts.Token);
+
+        var png = new byte[3 * 1024 * 1024 + 7];
+        new Random(1).NextBytes(png);
+        var send = sender.SendBulkAsync(new ClipboardImage(png), cts.Token).AsTask();
+        sender.Send(new Key(0x1E, false, true)); // input may slip between fragments
+        await send;
+
+        var all = new List<Message>();
+        while (all.Count < 2 && got.TryTake(out var m, TimeSpan.FromSeconds(5))) all.Add(m);
+        Assert.Equal(png, Assert.Single(all.OfType<ClipboardImage>()).Png);
+        Assert.Single(all.OfType<Key>());
+        cts.Cancel();
+    }
+
+    [Fact]
     public async Task NoTraffic_ClosesAfterTimeout()
     {
         var (c, _, _) = await SecureChannelTests.Pair();
