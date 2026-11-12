@@ -33,8 +33,7 @@ internal sealed class ReceiverService : IDisposable
 
     public void Start()
     {
-        // No cursor on this PC until the game PC hands it over (spec 6.3).
-        CursorHider.Hide();
+        // Cursor stays visible until a game PC connects, so a local mouse works during setup.
         SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
         _listener = new TcpListener(IPAddress.Any, _cfg.Port);
         _listener.Start();
@@ -80,6 +79,7 @@ internal sealed class ReceiverService : IDisposable
         _connCts = mine;
         conn.Received += OnReceived;
         _conn = conn;
+        CursorHider.Hide(); // the game PC holds the cursor until it sends CursorEnter
         Log.Info($"host connected from {tcp.Client.RemoteEndPoint}");
         ConnectedChanged?.Invoke(true);
         conn.Send(new MonitorList(MonitorEnumerator.GetMonitors().ToArray()));
@@ -92,7 +92,7 @@ internal sealed class ReceiverService : IDisposable
             {
                 _conn = null;
                 _injector.ReleaseAll();
-                CursorHider.Hide();
+                CursorHider.Restore();
                 Log.Info("host disconnected");
                 ConnectedChanged?.Invoke(false);
             }
