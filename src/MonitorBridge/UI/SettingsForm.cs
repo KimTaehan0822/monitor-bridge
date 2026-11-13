@@ -16,10 +16,31 @@ internal sealed class SettingsForm : Form
     readonly HotkeyBox _quickKey = new();
     public const int MaxFileLimitMB = 100_000;
     readonly NumericUpDown _fileLimit = new() { Minimum = 1, Maximum = MaxFileLimitMB, Width = 80 };
+    public const int MaxSpeedMBps = 1_000;
+    readonly NumericUpDown _speedLimit = new() { Minimum = 0, Maximum = MaxSpeedMBps, Width = 80 };
+    readonly LinkLabel _guideLink = new() { Text = GuideClosed, AutoSize = true };
+    bool _guideOpen;
+    const string GuideClosed ="속도 기준 보기 ▸", GuideOpen = "속도 기준 접기 ▾";
+    readonly Label _speedGuide = new()
+    {
+        AutoSize = true, MaximumSize = new Size(520, 0), ForeColor = SystemColors.GrayText, Visible = false,
+        Text = "· 1MB/s는 인터넷 속도로 8Mbps예요.\n"
+            + "· 1기가(1000Mbps) 환경: 최대 약 110MB/s.\n"
+            + "   공유기, 랜선, 두 PC의 랜카드가 모두 1기가를 지원해야 해요.\n"
+            + "· 100메가(100Mbps) 환경: 최대 약 11MB/s.\n"
+            + "   셋 중 하나라도 100메가면 전체가 100메가로 동작해요.\n"
+            + "· 와이파이는 속도가 들쭉날쭉해요.\n"
+            + "· 방송 업로드는 보통 1~2MB/s 정도예요. 랜선에 자리가 남아 있어야 방송이 끊기지 않아요.\n\n"
+            + "추천 값\n"
+            + "· 1기가 환경에서 방송 중: 30MB/s (기본값)\n"
+            + "· 100메가 환경, 와이파이, 잘 모를 때: 5~10MB/s\n"
+            + "· 방송하지 않을 때: 0 (제한 없음)",
+    };
     readonly CheckBox _autoStart = new() { Text = "윈도우 로그인 시 관리자 권한으로 자동 실행", AutoSize = true };
     static readonly Color Warn = ColorTranslator.FromHtml("#C0392B");
     readonly Label _error = new() { AutoSize = true, ForeColor = Warn };
     readonly Label _limitWarn = new() { AutoSize = true, ForeColor = Warn, Visible = false };
+    readonly Label _speedWarn = new() { AutoSize = true, ForeColor = Warn, Visible = false };
     readonly ProgressBar _bar = new() { Width = 300, Height = 8, Style = ProgressBarStyle.Continuous, Maximum = 100 };
     readonly Label _transfer = new() { AutoSize = true };
     readonly System.Windows.Forms.Timer _live = new() { Interval = 1000 };
@@ -60,6 +81,7 @@ internal sealed class SettingsForm : Form
         _lockKey.Value = cfg.LockHotkey;
         _quickKey.Value = cfg.QuickSwitchHotkey;
         _fileLimit.Value = Math.Clamp(cfg.FileSizeLimitMB, 1, MaxFileLimitMB);
+        _speedLimit.Value = Math.Clamp(cfg.FileSpeedLimitMBps, 0, MaxSpeedMBps);
         _autoStart.Checked = cfg.AutoStart;
 
         var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
@@ -105,6 +127,11 @@ internal sealed class SettingsForm : Form
         Row("", keyHint);
         Row("파일 복사 한도", Inline(_fileLimit, Unit($"MB까지 상대 PC로 보냅니다 (최대 {MaxFileLimitMB:N0}MB)")));
         Row("", _limitWarn);
+        Row("파일 전송 속도", Inline(_speedLimit, Unit("MB/s까지 보냅니다 (0 = 제한 없음)")));
+        Row("", _speedWarn);
+        Row("", _guideLink);
+        Row("", _speedGuide);
+        _guideLink.LinkClicked += (_, _) => ToggleSpeedGuide();
         Row("", _autoStart);
         var transferBox = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
         _bar.Margin = new Padding(0, 4, 0, 4);
@@ -160,6 +187,7 @@ internal sealed class SettingsForm : Form
         _lockKey.CapturingChanged += on => CapturingKeys?.Invoke(on);
         _quickKey.CapturingChanged += on => CapturingKeys?.Invoke(on);
         _fileLimit.ValueChanged += (_, _) => UpdateLive();
+        _speedLimit.ValueChanged += (_, _) => UpdateLive();
         _live.Tick += (_, _) => UpdateLive();
         _live.Start();
         ApplyRole();
@@ -177,6 +205,15 @@ internal sealed class SettingsForm : Form
             _limitWarn.Visible = true;
         }
         else _limitWarn.Visible = false;
+
+        int ownSpeed = (int)_speedLimit.Value;
+        if (_peerSpeedMBps?.Invoke() is { } peerSpeed && peerSpeed != ownSpeed)
+        {
+            _speedWarn.Text = $"상대 PC 설정은 {TransferProgress.SpeedText(peerSpeed)}, 실제 전송 속도는 "
+                + $"{TransferProgress.SpeedText(TransferProgress.EffectiveSpeed(ownSpeed, peerSpeed))}예요.";
+            _speedWarn.Visible = true;
+        }
+        else _speedWarn.Visible = false;
 
         var p = _progress?.Invoke();
         _bar.Visible = p is not null;
@@ -231,10 +268,20 @@ internal sealed class SettingsForm : Form
             LockHotkey = _lockKey.Value,
             QuickSwitchHotkey = _quickKey.Value,
             FileSizeLimitMB = (int)_fileLimit.Value,
+            FileSpeedLimitMBps = (int)_speedLimit.Value,
             AutoStart = _autoStart.Checked,
             Placements = _canvas?.Placements.ToList() ?? _source.Placements,
         };
         DialogResult = DialogResult.OK;
+    }
+
+    /// <summary>Opens or closes the speed guide under the speed row.</summary>
+    public void ToggleSpeedGuide()
+    {
+        // A flag, not _speedGuide.Visible: that reads false while the window itself is not shown yet.
+        _guideOpen = !_guideOpen;
+        _speedGuide.Visible = _guideOpen;
+        _guideLink.Text = _guideOpen ? GuideOpen : GuideClosed;
     }
 
     public void ShowLocalAddresses(string text)
