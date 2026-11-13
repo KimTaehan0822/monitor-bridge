@@ -84,4 +84,25 @@ public class PeerConnectionTests
         Assert.False(rb.IsCompleted);
         cts.Cancel();
     }
+
+    [Fact]
+    public async Task UnknownMessage_KeepsTheLinkUp()
+    {
+        // A newer build may send message types this build does not know; mouse and keyboard must keep working.
+        var (c, s, _) = await SecureChannelTests.Pair();
+        var sender = new PeerConnection(c);
+        var receiver = new PeerConnection(s);
+        var got = new BlockingCollection<Message>();
+        receiver.Received += got.Add;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _ = sender.RunAsync(cts.Token);
+        _ = receiver.RunAsync(cts.Token);
+
+        sender.Send(new UnknownMessage(200));
+        sender.Send(new Key(0x1E, false, true));
+        Assert.True(got.TryTake(out var m, TimeSpan.FromSeconds(5)));
+        Assert.IsType<Key>(m);          // the unknown one is not passed on
+        Assert.False(receiver.IsClosed);
+        cts.Cancel();
+    }
 }

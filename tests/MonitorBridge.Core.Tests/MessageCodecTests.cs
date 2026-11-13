@@ -22,6 +22,7 @@ public class MessageCodecTests
         new PeerSettings(500),
         new FileListOffer(Guid.Parse("11111111-2222-3333-4444-555555555555"), 3, 74_732_929_434, "녹화.mkv"),
         new FileRequest(Guid.Parse("11111111-2222-3333-4444-555555555555")),
+        new Hello("0.1.0+202611140030"),
         new ClipboardText("한글 text 😀"),
         new ClipboardImage(new byte[] { 0x89, 0x50, 0x4E, 0x47 }),
         new FileOfferStart(Id, 123_456_789_012, 3),
@@ -48,10 +49,6 @@ public class MessageCodecTests
     }
 
     [Fact]
-    public void Decode_UnknownType_Throws() =>
-        Assert.Throws<InvalidDataException>(() => MessageCodec.Decode(new byte[] { 0xFF }));
-
-    [Fact]
     public void Decode_Truncated_Throws()
     {
         var full = MessageCodec.Encode(new CursorMove(1, 2));
@@ -61,4 +58,8 @@ public class MessageCodecTests
     [Fact]
     public void Decode_Empty_Throws() =>
         Assert.Throws<InvalidDataException>(() => MessageCodec.Decode(ReadOnlySpan<byte>.Empty));
+
+    [Fact]
+    public void UnknownType_FromANewerBuild_IsNotAnError() =>
+        Assert.Equal(new UnknownMessage(200), MessageCodec.Decode(new byte[] { 200, 9, 9, 9 }));
 }

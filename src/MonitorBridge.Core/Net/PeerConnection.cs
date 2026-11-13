@@ -121,7 +121,7 @@ public sealed class PeerConnection : IAsyncDisposable
                 default: throw new InvalidDataException("Bad frame kind");
             }
             var m = MessageCodec.Decode(body);
-            if (m is not Ping) Received?.Invoke(m);
+            if (m is not Ping and not UnknownMessage) Received?.Invoke(m);
         }
     }
 

@@ -39,6 +39,8 @@ public static class MessageCodec
             case PeerSettings x: w.Write((byte)18); w.Write(x.FileLimitMB); break;
             case FileListOffer x: w.Write((byte)19); w.Write(x.Id.ToByteArray()); w.Write(x.Count); w.Write(x.TotalBytes); w.Write(x.FirstName); break;
             case FileRequest x: w.Write((byte)20); w.Write(x.Id.ToByteArray()); break;
+            case Hello x: w.Write((byte)21); w.Write(x.Build); break;
+            case UnknownMessage x: w.Write(x.Type); break; // tests only
             default: throw new ArgumentException($"Unknown message {m.GetType().Name}");
         }
         w.Flush();
@@ -72,7 +74,9 @@ public static class MessageCodec
                 18 => new PeerSettings(r.ReadInt32()),
                 19 => new FileListOffer(ReadGuid(r), r.ReadInt32(), r.ReadInt64(), r.ReadString()),
                 20 => new FileRequest(ReadGuid(r)),
-                var t => throw new InvalidDataException($"Unknown message type {t}"),
+                21 => new Hello(r.ReadString()),
+                // A newer build: skip it instead of dropping the link (and with it mouse and keyboard).
+                var t => new UnknownMessage(t),
             };
             return m;
         }
