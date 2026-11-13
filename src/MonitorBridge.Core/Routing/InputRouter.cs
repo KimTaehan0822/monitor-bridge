@@ -217,7 +217,13 @@ public sealed class InputRouter
     public bool ToggleRemoteLock()
     {
         if (!IsRemote) return false;
-        if (RemoteLocked) { EndRemoteLock(); return false; }
+        if (RemoteLocked)
+        {
+            // Unlocked with a window still held: keep the stream layout until the button is released, or the drag drops.
+            if (_heldButtons.Count > 0) { RemoteLocked = false; _dragOs = true; }
+            else EndRemoteLock();
+            return false;
+        }
         if (_dragOs) _dragOs = false; // already in the remote layout: the drag becomes a lock that outlives the button
         else EnterRemoteOs();
         RemoteLocked = true;

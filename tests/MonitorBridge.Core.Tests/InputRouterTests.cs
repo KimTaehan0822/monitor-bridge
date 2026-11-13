@@ -375,6 +375,19 @@ public class InputRouterTests
     }
 
     [Fact]
+    public void UnlockDuringDrag_KeepsDraggingInStreamLayout()
+    {
+        var (r, _) = CrossToA();
+        r.ToggleRemoteLock();
+        r.OnButton(MouseButtonKind.Left, true);
+        Assert.False(r.ToggleRemoteLock());            // unlocked with the window still held
+        Assert.False(r.RemoteLocked);
+        Assert.Equal(new CursorMove(1924, 320), Assert.Single(r.OnMouseMove(1285, 720).ToRemote)); // not dropped on the game PC
+        r.OnButton(MouseButtonKind.Left, false);
+        Assert.Equal(new VPoint(4484, 320), r.Position); // desk layout after the release
+    }
+
+    [Fact]
     public void Drag_BlocksQuickSwitch()
     {
         var (r, _) = CrossToA();
