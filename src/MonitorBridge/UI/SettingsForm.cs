@@ -16,6 +16,8 @@ internal sealed class SettingsForm : Form
     readonly HotkeyBox _quickKey = new();
     public const int MaxFileLimitMB = 100_000;
     readonly NumericUpDown _fileLimit = new() { Minimum = 1, Maximum = MaxFileLimitMB, Width = 80 };
+    readonly TextBox _folder = new() { Width = 300 };
+    readonly Button _browse = new() { Text = "찾아보기…", AutoSize = true };
     readonly CheckBox _autoStart = new() { Text = "윈도우 로그인 시 관리자 권한으로 자동 실행", AutoSize = true };
     static readonly Color Warn = ColorTranslator.FromHtml("#C0392B");
     readonly Label _error = new() { AutoSize = true, ForeColor = Warn };
@@ -57,6 +59,7 @@ internal sealed class SettingsForm : Form
         _quickKey.Value = cfg.QuickSwitchHotkey;
         _fileLimit.Value = Math.Clamp(cfg.FileSizeLimitMB, 1, MaxFileLimitMB);
         _autoStart.Checked = cfg.AutoStart;
+        _folder.Text = Shared.ReceiveFolders.Resolve(cfg);
 
         var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -86,6 +89,8 @@ internal sealed class SettingsForm : Form
         Row("가두기 키", lockRow);
         var quickRow = Inline(_quickKey, Unit("다른 PC로 바로 넘어갑니다"));
         Row("빠른 전환 키", quickRow);
+        Row("받은 파일 저장 폴더", Inline(_folder, _browse));
+        Row("", new Label { Text = "상대 PC에서 복사한 파일은 이 폴더에 저장돼요.", AutoSize = true, ForeColor = SystemColors.GrayText });
         Row("파일 복사 한도", Inline(_fileLimit, Unit($"MB까지 상대 PC로 보냅니다 (최대 {MaxFileLimitMB:N0}MB)")));
         Row("", _limitWarn);
         Row("", _autoStart);
@@ -134,6 +139,8 @@ internal sealed class SettingsForm : Form
         _lockKey.ValueChanged += UpdateState;
         _quickKey.ValueChanged += UpdateState;
         _fileLimit.ValueChanged += (_, _) => UpdateLive();
+        _folder.TextChanged += (_, _) => UpdateState();
+        _browse.Click += (_, _) => BrowseFolder();
         _live.Tick += (_, _) => UpdateLive();
         _live.Start();
         ApplyRole();
@@ -180,6 +187,7 @@ internal sealed class SettingsForm : Form
         if (string.IsNullOrWhiteSpace(_password.Text)) return "비밀번호를 입력해 주세요.";
         if (_host.Checked && string.IsNullOrWhiteSpace(_address.Text)) return "송출컴 IP를 입력해 주세요. 송출컴 설정 창 맨 아래에 나와 있어요.";
         if (_host.Checked && _lockKey.Value == _quickKey.Value) return "가두기 키와 빠른 전환 키를 다르게 정해 주세요.";
+        if (FolderProblem(_folder.Text.Trim()) is { } fp) return fp;
         if (_host.Checked && _canvas?.HasOverlap == true) return "모니터가 겹쳐 있어요. 빨간 테두리 모니터를 옆으로 옮겨 주세요.";
         return null;
     }
@@ -192,9 +200,41 @@ internal sealed class SettingsForm : Form
         _save.Enabled = p is null;
     }
 
+    void BrowseFolder()
+    {
+        using var dlg = new FolderBrowserDialog
+        {
+            Description = "받은 파일을 저장할 폴더를 고르세요",
+            UseDescriptionForTitle = true,
+            SelectedPath = Directory.Exists(_folder.Text.Trim()) ? _folder.Text.Trim() : Shared.ReceiveFolders.Downloads(),
+        };
+        if (dlg.ShowDialog(this) == DialogResult.OK) _folder.Text = dlg.SelectedPath;
+    }
+
+    /// <summary>Checked while typing, so it never creates folders; creating happens once, on save.</summary>
+    static string? FolderProblem(string path)
+    {
+        if (path.Length == 0) return "받은 파일 저장 폴더를 정해 주세요.";
+        if (!Path.IsPathFullyQualified(path) || path.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+            return @"받은 파일 저장 폴더는 C:\Users\…\Downloads 처럼 전체 경로로 적어 주세요.";
+        var root = Path.GetPathRoot(path);
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) return $"받은 파일 저장 폴더의 드라이브({root})를 찾을 수 없어요.";
+        return null;
+    }
+
     void TrySave()
     {
         if (Problem() is not null) return;
+        var folder = Path.TrimEndingDirectorySeparator(_folder.Text.Trim());
+        try { Directory.CreateDirectory(folder); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            _error.Text = "받은 파일 저장 폴더를 쓸 수 없어요: " + e.Message;
+            _error.Visible = true;
+            return;
+        }
+        // The default stays "" so it keeps following Downloads if the user moves that folder later.
+        bool isDownloads = string.Equals(folder, Path.TrimEndingDirectorySeparator(Shared.ReceiveFolders.Downloads()), StringComparison.OrdinalIgnoreCase);
         Result = new AppConfig
         {
             Role = _host.Checked ? Role.Host : Role.Receiver,
@@ -205,6 +245,7 @@ internal sealed class SettingsForm : Form
             QuickSwitchHotkey = _quickKey.Value,
             FileSizeLimitMB = (int)_fileLimit.Value,
             AutoStart = _autoStart.Checked,
+            ReceiveFolder = isDownloads ? "" : folder,
             Placements = _canvas?.Placements.ToList() ?? _source.Placements,
         };
         DialogResult = DialogResult.OK;
