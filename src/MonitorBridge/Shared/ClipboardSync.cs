@@ -27,12 +27,16 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
     readonly Func<long> _fileLimitBytes;
 
     /// <param name="peerName">"게임컴" or "송출컴": the other PC, as people call it in notices.</param>
-    public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, string peerName, Action<string> notify)
+    /// <summary>Files from the peer were saved (final paths, folder). Raised on the UI thread after the clipboard is set.</summary>
+    public event Action<IReadOnlyList<string>, string>? Saved;
+
+    public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, Func<string> receiveFolder, string peerName, Action<string> notify)
     {
         _conn = conn;
         _fileLimitBytes = fileLimitBytes;
         _ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Create on the UI thread");
-        _files = new FileTransfer(fileLimitBytes, peerName, notify, paths => _ui.Post(_ => SetFiles(paths), null));
+        _files = new FileTransfer(fileLimitBytes, receiveFolder, peerName, notify,
+            (paths, dest) => _ui.Post(_ => { SetFiles(paths); Saved?.Invoke(paths, dest); }, null));
         CreateHandle(new CreateParams { Parent = new IntPtr(-3) }); // HWND_MESSAGE: invisible message-only window
         Win32.AddClipboardFormatListener(Handle);
         _ = Task.Run(async () =>

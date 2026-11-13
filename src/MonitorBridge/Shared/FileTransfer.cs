@@ -19,13 +19,15 @@ internal sealed class FileTransfer
     readonly Func<long> _limitBytes;
     readonly string _peerName;
     readonly Action<string> _notify;
-    readonly Action<IReadOnlyList<string>> _onReceived;
+    readonly Func<string> _receiveFolder;
+    readonly Action<IReadOnlyList<string>, string> _onSaved;
     readonly object _gate = new();
     CancellationTokenSource? _sending;
     Guid _sendingId;
     FileReceiver? _rx;
     Guid _rxId;
     long _rxRemaining;
+    string _rxDest = "";
     readonly HashSet<string> _rxTops = new(StringComparer.OrdinalIgnoreCase);
 
     readonly TransferTracker _track; // guarded by _gate
@@ -33,14 +35,20 @@ internal sealed class FileTransfer
     /// <summary>The peer's copy limit in MB, once it has told us (null = unknown).</summary>
     public int? PeerLimitMB { get; set; }
 
-    public FileTransfer(Func<long> limitBytes, string peerName, Action<string> notify, Action<IReadOnlyList<string>> onReceived)
+    /// <param name="onSaved">Saved items' final paths and the folder they went to; the caller tells the person.</param>
+    public FileTransfer(Func<long> limitBytes, Func<string> receiveFolder, string peerName, Action<string> notify,
+        Action<IReadOnlyList<string>, string> onSaved)
     {
         _limitBytes = limitBytes;
+        _receiveFolder = receiveFolder;
         _peerName = peerName;
         _notify = notify;
-        _onReceived = onReceived;
+        _onSaved = onSaved;
         _track = new TransferTracker(peerName);
+        // Old builds received into %TEMP%; anything still there would never be found, so clear it once.
         FileReceiver.CleanupExcept(TempRoot, null);
+        try { FileReceiver.CleanupExcept(Path.Combine(receiveFolder(), FileReceiver.StagingFolderName), null); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { Log.Error(e); }
     }
 
     public TransferProgress? Progress { get { lock (_gate) return _track.Current; } }
@@ -152,14 +160,29 @@ internal sealed class FileTransfer
                         if (_rx is not null) _track.Finish(false, _rxId, TransferState.Cancelled);
                         _rx?.Cancel();
                         _rx = null;
-                        FileReceiver.CleanupExcept(TempRoot, null);
                         // The peer is a trust boundary: enforce our own limit too.
                         if (s.TotalBytes < 0 || s.TotalBytes > _limitBytes())
                         {
                             _notify($"파일이 이 PC 한도({_limitBytes() / MiB:N0}MB)보다 커서 받지 않았어요. 설정에서 한도를 올려 주세요.");
                             return;
                         }
-                        _rx = new FileReceiver(TempRoot, s.Id);
+                        var dest = _receiveFolder();
+                        string staging;
+                        try
+                        {
+                            Directory.CreateDirectory(dest);
+                            staging = Path.Combine(dest, FileReceiver.StagingFolderName);
+                            Directory.CreateDirectory(staging).Attributes |= FileAttributes.Hidden;
+                            FileReceiver.CleanupExcept(staging, null);
+                        }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                        {
+                            Log.Error(ex);
+                            _notify($"받은 파일 저장 폴더({dest})에 쓸 수 없어서 받지 않았어요. 설정에서 폴더를 바꿔 주세요.");
+                            return;
+                        }
+                        _rx = new FileReceiver(staging, s.Id);
+                        _rxDest = dest;
                         _rxId = s.Id;
                         _rxRemaining = s.TotalBytes;
                         _rxTops.Clear();
@@ -180,10 +203,11 @@ internal sealed class FileTransfer
                         break;
                     case FileOfferEnd end when _rx is not null && end.Id == _rxId:
                         var tops = _rx.Complete();
+                        var saved = FileReceiver.MoveInto(tops, _rxDest);
+                        _rx.Cancel(); // only the emptied staging folder is left; remove it
                         _rx = null;
                         _track.Finish(false, end.Id, TransferState.Done);
-                        _onReceived(tops);
-                        _notify("다 받았어요. 붙여넣으세요(Ctrl+V).");
+                        _onSaved(saved, _rxDest);
                         break;
                     case FileCancel cancel when _rx is not null && cancel.Id == _rxId:
                         _rx.Cancel();

@@ -24,6 +24,7 @@ internal sealed class TrayContext : ApplicationContext
     string _statusText = "Monitor Bridge";
     Core.Net.PeerConnection? _lastConn;
     long _finishedAt;
+    string? _clickPath; // what clicking the current balloon opens
 
     public TrayContext(AppConfig cfg)
     {
@@ -41,6 +42,12 @@ internal sealed class TrayContext : ApplicationContext
         _icon.ContextMenuStrip.Items.Add("설정", null, (_, _) => ShowSettings());
         _icon.ContextMenuStrip.Items.Add("종료", null, (_, _) => Exit());
         _icon.DoubleClick += (_, _) => ShowSettings();
+        _icon.BalloonTipClicked += (_, _) =>
+        {
+            if (_clickPath is null) return;
+            try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{_clickPath}\""); }
+            catch (Exception e) { Log.Error(e); }
+        };
         _icon.Visible = true;
         _tick.Tick += (_, _) => OnTick();
         _tick.Start();
@@ -52,7 +59,15 @@ internal sealed class TrayContext : ApplicationContext
     {
         try
         {
-            _clipboard = new ClipboardSync(() => (_host?.Connection ?? _receiver?.Connection), () => (long)_cfg.FileSizeLimitMB * 1024 * 1024, _cfg.Role == Role.Host ? "송출컴" : "게임컴", Notify);
+            _clipboard = new ClipboardSync(() => (_host?.Connection ?? _receiver?.Connection), () => (long)_cfg.FileSizeLimitMB * 1024 * 1024,
+                () => ReceiveFolders.Resolve(_cfg), _cfg.Role == Role.Host ? "송출컴" : "게임컴", Notify);
+            _clipboard.Saved += (paths, dest) =>
+            {
+                if (paths.Count == 0) return;
+                var name = Path.GetFileName(paths[0]) + (paths.Count > 1 ? $" 외 {paths.Count - 1}개" : "");
+                _clickPath = paths[0];
+                _icon.ShowBalloonTip(5000, "Monitor Bridge", $"다 받았어요: {name} → {dest}. 누르면 폴더를 열어요.", ToolTipIcon.Info);
+            };
             if (_cfg.Role == Role.Host)
             {
                 _host = new HostService(_cfg, Notify);
@@ -126,7 +141,7 @@ internal sealed class TrayContext : ApplicationContext
         return now - _finishedAt < 60_000 ? p : null;
     }
 
-    void Notify(string text) => OnUi(() => _icon.ShowBalloonTip(5000, "Monitor Bridge", text, ToolTipIcon.Info));
+    void Notify(string text) => OnUi(() => { _clickPath = null; _icon.ShowBalloonTip(5000, "Monitor Bridge", text, ToolTipIcon.Info); });
 
     void OnUi(Action a) => _ui.Post(_ => a(), null);
 
@@ -154,6 +169,7 @@ internal sealed class TrayContext : ApplicationContext
                 // The services hold this same _cfg object, so update it rather than replacing it.
                 _cfg.FileSizeLimitMB = next.FileSizeLimitMB;
                 _cfg.AutoStart = next.AutoStart;
+                _cfg.ReceiveFolder = next.ReceiveFolder;
                 if (_host is not null) _host.ApplyLayout(next.Placements);
                 else _cfg.Placements = next.Placements;
                 _cfg.Save(AppConfig.DefaultPath);
