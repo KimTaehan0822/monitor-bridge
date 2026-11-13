@@ -13,7 +13,8 @@ internal sealed class SettingsForm : Form
     readonly TextBox _password = new() { Width = 160, UseSystemPasswordChar = true };
     readonly HotkeyBox _lockKey = new();
     readonly HotkeyBox _quickKey = new();
-    readonly NumericUpDown _fileLimit = new() { Minimum = 1, Maximum = 100_000, Width = 80 };
+    public const int MaxFileLimitMB = 100_000;
+    readonly NumericUpDown _fileLimit = new() { Minimum = 1, Maximum = MaxFileLimitMB, Width = 80 };
     readonly CheckBox _autoStart = new() { Text = "윈도우 로그인 시 관리자 권한으로 자동 실행", AutoSize = true };
     readonly Label _error = new() { AutoSize = true, ForeColor = ColorTranslator.FromHtml("#C0392B") };
     readonly Button _save = new() { Text = "저장", AutoSize = true };
@@ -43,7 +44,7 @@ internal sealed class SettingsForm : Form
         _password.Text = cfg.Password;
         _lockKey.Value = cfg.LockHotkey;
         _quickKey.Value = cfg.QuickSwitchHotkey;
-        _fileLimit.Value = Math.Clamp(cfg.FileSizeLimitMB, 1, 100_000);
+        _fileLimit.Value = Math.Clamp(cfg.FileSizeLimitMB, 1, MaxFileLimitMB);
         _autoStart.Checked = cfg.AutoStart;
 
         var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
@@ -70,11 +71,11 @@ internal sealed class SettingsForm : Form
         var addressRow = Inline(_address, Unit("포트"), _port);
         Row("송출컴 IP", addressRow);
         Row("비밀번호", Inline(_password, Unit("두 PC에 같은 비밀번호를 넣으세요")));
-        var lockRow = Inline(_lockKey, Unit("게임할 때 커서를 게임컴에 가둡니다"));
+        var lockRow = Inline(_lockKey, Unit("커서를 지금 있는 PC에 가둡니다"));
         Row("가두기 키", lockRow);
         var quickRow = Inline(_quickKey, Unit("다른 PC로 바로 넘어갑니다"));
         Row("빠른 전환 키", quickRow);
-        Row("파일 복사 한도", Inline(_fileLimit, Unit("MB까지 상대 PC로 보냅니다")));
+        Row("파일 복사 한도", Inline(_fileLimit, Unit($"MB까지 상대 PC로 보냅니다 (최대 {MaxFileLimitMB:N0}MB)")));
         Row("", _autoStart);
 
         var layoutLabel = new Label { Text = "모니터를 책상 위 순서대로 끌어다 놓으세요", AutoSize = true, Margin = new Padding(0, 14, 0, 6) };

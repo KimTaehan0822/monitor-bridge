@@ -27,6 +27,11 @@ internal sealed class TrayContext : ApplicationContext
         _icon.Icon = _disconnected;
         _icon.Text = "Monitor Bridge";
         _icon.ContextMenuStrip = new ContextMenuStrip();
+        var limit = new ToolStripMenuItem { Enabled = false };
+        _icon.ContextMenuStrip.Items.Add(limit);
+        _icon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
+        // Read on every open: the limit changes when settings are saved.
+        _icon.ContextMenuStrip.Opening += (_, _) => limit.Text = $"파일 복사 한도: {_cfg.FileSizeLimitMB:N0}MB (최대 {SettingsForm.MaxFileLimitMB:N0}MB)";
         _icon.ContextMenuStrip.Items.Add("설정", null, (_, _) => ShowSettings());
         _icon.ContextMenuStrip.Items.Add("종료", null, (_, _) => Exit());
         _icon.DoubleClick += (_, _) => ShowSettings();
