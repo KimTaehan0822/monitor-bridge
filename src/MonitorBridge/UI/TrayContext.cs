@@ -168,6 +168,7 @@ internal sealed class TrayContext : ApplicationContext
     void OnPeerBuild(string build)
     {
         _peerBuild = build;
+        if (build != BuildInfo.Build) Log.Info($"peer runs {build}, this PC runs {BuildInfo.Build}");
         if (build == BuildInfo.Build || _buildWarned) return;
         _buildWarned = true;
         Notify($"두 PC의 Monitor Bridge 버전이 달라요. 이 PC: {BuildInfo.Build}, 상대 PC: {build}. 키보드·마우스는 그대로 쓸 수 있지만 일부 기능이 동작하지 않을 수 있어요. 두 PC를 같은 버전으로 맞춰 주세요.");
@@ -219,6 +220,7 @@ internal sealed class TrayContext : ApplicationContext
             : null);
         _settings = new SettingsForm(_cfg, layout, MonitorEnumerator.PcId, _host?.Connection is not null,
             () => _clipboard?.PeerLimitMB, VisibleProgress);
+        _settings.CapturingKeys += on => _host?.SuspendHotkeys(on);
         if (_cfg.Role == Role.Receiver || string.IsNullOrEmpty(_cfg.Password)) _settings.ShowLocalAddresses($"이 PC의 IP: {string.Join(", ", LocalAddresses())}  (게임컴 설정의 '송출컴 IP'에 넣으세요)");
         try
         {
@@ -253,6 +255,7 @@ internal sealed class TrayContext : ApplicationContext
         }
         finally
         {
+            _host?.SuspendHotkeys(false); // never leave hotkeys paused, however the window closed
             _settings.Dispose();
             _settings = null;
         }

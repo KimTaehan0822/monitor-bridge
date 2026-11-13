@@ -31,6 +31,8 @@ internal sealed class SettingsForm : Form
     readonly AppConfig _source;
 
     public AppConfig? Result { get; private set; }
+    /// <summary>True while a hotkey box is waiting for a key: the game PC must not act on its own hotkeys then.</summary>
+    public event Action<bool>? CapturingKeys;
 
     public SettingsForm(AppConfig cfg, VirtualLayout? layout, string hostPcId, bool remoteConnected,
         Func<int?>? peerLimitMB = null, Func<TransferProgress?>? progress = null)
@@ -153,6 +155,8 @@ internal sealed class SettingsForm : Form
         _host.CheckedChanged += (_, _) => { ApplyRole(); UpdateState(); };
         _lockKey.ValueChanged += UpdateState;
         _quickKey.ValueChanged += UpdateState;
+        _lockKey.CapturingChanged += on => CapturingKeys?.Invoke(on);
+        _quickKey.CapturingChanged += on => CapturingKeys?.Invoke(on);
         _fileLimit.ValueChanged += (_, _) => UpdateLive();
         _live.Tick += (_, _) => UpdateLive();
         _live.Start();
@@ -245,7 +249,11 @@ internal sealed class SettingsForm : Form
 internal sealed class HotkeyBox : TextBox
 {
     string _value = "";
+    string _before = "";
+    static readonly Color CaptureBack = ColorTranslator.FromHtml("#E3F2F1");
     public event Action? ValueChanged;
+    /// <summary>True when the box starts waiting for a key (it has focus), false when it stops.</summary>
+    public event Action<bool>? CapturingChanged;
 
     public HotkeyBox() { ReadOnly = true; Width = 160; BackColor = SystemColors.Window; ShortcutsEnabled = false; }
 
@@ -267,6 +275,27 @@ internal sealed class HotkeyBox : TextBox
         ValueChanged?.Invoke();
     }
 
+    // Focus = capture mode: the box only waits for the new key, and the running hotkeys are paused meanwhile.
+    protected override void OnEnter(EventArgs e)
+    {
+        base.OnEnter(e);
+        _before = _value;
+        Text = "새 키를 누르세요 (Esc: 취소)";
+        ForeColor = SystemColors.GrayText;
+        BackColor = CaptureBack;
+        CapturingChanged?.Invoke(true);
+    }
+
+    protected override void OnLeave(EventArgs e)
+    {
+        base.OnLeave(e);
+        BackColor = SystemColors.Window;
+        Value = _value; // show the chosen key again
+        CapturingChanged?.Invoke(false);
+    }
+
+    void EndCapture() => FindForm()?.SelectNextControl(this, true, true, true, true);
+
     static string Pretty(string s) => string.Join("+", s.Split('+').Select(p => p switch
     {
         "Oem3" => "`", "Oem5" => "\\", "OemMinus" => "-", "Oemplus" => "=", "Oemcomma" => ",", "OemPeriod" => ".",
@@ -278,7 +307,8 @@ internal sealed class HotkeyBox : TextBox
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         var key = keyData & Keys.KeyCode;
-        if (key is Keys.Back or Keys.Delete && (keyData & Keys.Modifiers) == 0) { Clear(); return true; }
+        if (key == Keys.Escape) { Value = _before; EndCapture(); return true; }
+        if (key is Keys.Back or Keys.Delete && (keyData & Keys.Modifiers) == 0) { Clear(); EndCapture(); return true; }
         if (key is Keys.ControlKey or Keys.Menu or Keys.ShiftKey or Keys.LWin or Keys.RWin or Keys.Tab) return base.ProcessCmdKey(ref msg, keyData);
         var parts = new List<string>();
         if (keyData.HasFlag(Keys.Control)) parts.Add("Ctrl");
@@ -286,7 +316,7 @@ internal sealed class HotkeyBox : TextBox
         if (keyData.HasFlag(Keys.Shift)) parts.Add("Shift");
         parts.Add(key.ToString());
         var s = string.Join("+", parts);
-        if (Hotkey.TryParse(s, out var h)) { Value = h.ToString(); ValueChanged?.Invoke(); }
+        if (Hotkey.TryParse(s, out var h)) { Value = h.ToString(); ValueChanged?.Invoke(); EndCapture(); }
         else Text = $"{s} 키는 쓸 수 없어요";
         return true;
     }

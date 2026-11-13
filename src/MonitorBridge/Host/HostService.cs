@@ -32,6 +32,7 @@ internal sealed class HostService : IDisposable
     volatile bool _locked;
     // Hook thread only. Off while disconnected: then every key and move goes straight to other apps.
     bool _routing, _remoteLockShown;
+    bool _keysSuspended; // hook thread only: a hotkey box in the settings window is waiting for a key
 
     public event Action<HostStatus>? StatusChanged;
     /// <summary>Show a ripple at this host OS point (raised on the hook thread).</summary>
@@ -122,6 +123,14 @@ internal sealed class HostService : IDisposable
         }
     }
 
+    /// <summary>On while the settings window waits for a new hotkey, so pressing the current one does not fire it.</summary>
+    public void SuspendHotkeys(bool on) => _hooks.Invoke(() =>
+    {
+        _keysSuspended = on;
+        _lock?.Reset(); // key-ups during the capture were not tracked
+        _quick?.Reset();
+    });
+
     void OnReceived(Message m)
     {
         if (m is MonitorList list)
@@ -174,8 +183,9 @@ internal sealed class HostService : IDisposable
         switch (e)
         {
             case HookKey k:
-                bool lockHit = _lock?.OnKey(k.Vk, k.Down) == true;
-                bool quickHit = _quick?.OnKey(k.Vk, k.Down) == true;
+                // While a hotkey box is capturing, our own hotkeys must reach it instead of firing.
+                bool lockHit = !_keysSuspended && _lock?.OnKey(k.Vk, k.Down) == true;
+                bool quickHit = !_keysSuspended && _quick?.OnKey(k.Vk, k.Down) == true;
                 // Game PC: unhook entirely (games). Stream PC: keep routing but stop at its monitor edges.
                 if (lockHit) { if (_router.IsRemote) { _router.ToggleRemoteLock(); Execute(RouterResult.Swallow); } else Lock(); return true; }
                 if (quickHit) { QuickSwitch(); return true; }
