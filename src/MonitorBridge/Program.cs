@@ -19,6 +19,19 @@ static class Program
         if (auto >= 0 && auto + 1 < args.Length) { Environment.Exit(UI.AutoStart.ApplyElevated(args[auto + 1] == "on") ? 0 : 1); return; }
         int render = Array.IndexOf(args, "--render-settings");
         if (render >= 0 && render + 1 < args.Length) { RenderSettings(args[render + 1]); return; }
+        int rc = Array.IndexOf(args, "--render-confirm");
+        if (rc >= 0 && rc + 1 < args.Length)
+        {
+            RenderOffscreen(UI.PasteConfirm.ForRender("송출컴", new Core.Protocol.FileListOffer(Guid.Empty, 3, 74_732_929_434, "2026-11-08 23-00-51.mkv"), @"D:\녹화폴더\편집용"), args[rc + 1]);
+            return;
+        }
+        int rt = Array.IndexOf(args, "--render-transfer");
+        if (rt >= 0 && rt + 1 < args.Length)
+        {
+            var sample = new Core.Files.TransferProgress(false, "송출컴", "2026-11-08 23-00-51.mkv", 74_732_929_434, 18_683_232_358, 165_000, Core.Files.TransferState.Running);
+            RenderOffscreen(UI.TransferWindow.ForRender(() => sample), args[rt + 1]);
+            return;
+        }
         int ripple = Array.IndexOf(args, "--render-ripple");
         if (ripple >= 0 && ripple + 1 < args.Length) { UI.RippleWindow.RenderFrames(args[ripple + 1]); return; }
 
@@ -61,13 +74,22 @@ static class Program
         });
         var cfg = new Core.Config.AppConfig { Password = "x", ReceiverAddress = "192.168.0.10", FileSizeLimitMB = 80000 };
         var sample = new Core.Files.TransferProgress(false, "송출컴", "2026-11-08 23-00-51.mkv", 74_732_929_434, 18_683_232_358, 165_000, Core.Files.TransferState.Running);
-        using var form = new UI.SettingsForm(cfg, layout, "game", remoteConnected: true, () => 500, () => sample) { StartPosition = FormStartPosition.Manual, Location = new Point(-10000, -10000) };
-        // Show without activating: this check must never take focus from whatever the user is doing.
-        ShowWindow(form.Handle, 4);
-        for (int i = 0; i < 15; i++) { Application.DoEvents(); Thread.Sleep(100); } // let animations (progress bar) settle
-        using var bmp = new Bitmap(form.Width, form.Height);
-        form.DrawToBitmap(bmp, new Rectangle(Point.Empty, form.Size));
-        bmp.Save(path);
+        RenderOffscreen(new UI.SettingsForm(cfg, layout, "game", remoteConnected: true, () => 500, () => sample), path);
+    }
+
+    /// <summary>Draws a window to a PNG off screen, shown without activation so it never takes focus.</summary>
+    static void RenderOffscreen(Form form, string path)
+    {
+        using (form)
+        {
+            form.StartPosition = FormStartPosition.Manual;
+            form.Location = new Point(-10000, -10000);
+            ShowWindow(form.Handle, 4); // SW_SHOWNOACTIVATE
+            for (int i = 0; i < 15; i++) { Application.DoEvents(); Thread.Sleep(100); } // let animations (progress bar) settle
+            using var bmp = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(bmp, new Rectangle(Point.Empty, form.Size));
+            bmp.Save(path);
+        }
     }
 
     /// <summary>Hardware checks that unit tests cannot do. Writes %TEMP%\MonitorBridge-selftest.txt.</summary>
