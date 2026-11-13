@@ -1,4 +1,3 @@
-using System.Collections.Specialized;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -26,23 +25,24 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
 
     readonly Func<long> _fileLimitBytes;
 
-    /// <param name="peerName">"게임컴" or "송출컴": the other PC, as people call it in notices.</param>
-    /// <summary>Files from the peer were saved (final paths, folder). Raised on the UI thread after the clipboard is set.</summary>
+    /// <summary>Files fetched from the peer were saved (final paths, folder). Raised on the UI thread.</summary>
     public event Action<IReadOnlyList<string>, string>? Saved;
 
-    public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, Func<string> receiveFolder, string peerName, Action<string> notify)
+    /// <param name="peerName">"게임컴" or "송출컴": the other PC, as people call it in notices.</param>
+    public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, string peerName, Action<string> notify)
     {
         _conn = conn;
         _fileLimitBytes = fileLimitBytes;
         _ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Create on the UI thread");
-        _files = new FileTransfer(fileLimitBytes, receiveFolder, peerName, notify,
-            (paths, dest) => _ui.Post(_ => { SetFiles(paths); Saved?.Invoke(paths, dest); }, null),
+        _files = new FileTransfer(fileLimitBytes, peerName, notify,
+            (paths, dest) => _ui.Post(_ => Saved?.Invoke(paths, dest), null),
             m =>
             {
                 var c = _conn();
                 if (c is null || c.IsClosed) return;
                 try { c.Send(m); } catch (Exception e) { Log.Error(e); }
-            });
+            },
+            (m, ct) => _conn() is { IsClosed: false } c ? c.SendBulkAsync(m, ct) : throw new IOException("연결이 끊겼어요"));
         CreateHandle(new CreateParams { Parent = new IntPtr(-3) }); // HWND_MESSAGE: invisible message-only window
         Win32.AddClipboardFormatListener(Handle);
         _ = Task.Run(async () =>
@@ -63,17 +63,20 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
 
     void OnLocalChange()
     {
-        var conn = _conn();
-        if (conn is null || conn.IsClosed) return;
         var data = Retry(Clipboard.GetDataObject);
         if (data is null) return;
 
+        // Files are only announced; they travel when the other PC asks (right-click paste). Offered even while
+        // disconnected, so the offer is re-sent on reconnect.
         if (data.GetDataPresent(DataFormats.FileDrop) && data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
         {
-            if (_echo.IsEcho(Key(files))) return;
-            _files.Send(conn, files);
+            _files.Offer(files);
             return;
         }
+        // Anything else now on the clipboard means the copied files are no longer what is on offer.
+        _files.Withdraw();
+        var conn = _conn();
+        if (conn is null || conn.IsClosed) return;
         if (ReadPng(data) is { } png)
         {
             if (_echo.IsEcho(png)) return;
@@ -101,8 +104,6 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
         return outMs.ToArray();
     }
 
-    static byte[] Key(IEnumerable<string> paths) => Encoding.UTF8.GetBytes(string.Join("\n", paths.Order(StringComparer.OrdinalIgnoreCase)));
-
     /// <summary>Messages from the peer, on the network thread.</summary>
     public void OnMessage(Message m)
     {
@@ -110,7 +111,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
         {
             case ClipboardText t: _ui.Post(_ => SetText(t.Text), null); break;
             case ClipboardImage i: _ui.Post(_ => SetImage(i.Png), null); break;
-            case FileOfferStart or FileEntry or FileChunk or FileOfferEnd or FileCancel: _fileQueue.Writer.TryWrite(m); break;
+            case FileListOffer or FileRequest or FileOfferStart or FileEntry or FileChunk or FileOfferEnd or FileCancel: _fileQueue.Writer.TryWrite(m); break;
             case PeerSettings ps: _files.PeerLimitMB = ps.FileLimitMB; break;
         }
     }
@@ -118,6 +119,9 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
     public Core.Files.TransferProgress? Progress => _files.Progress;
     public int? PeerLimitMB => _files.PeerLimitMB;
     public void OnDisconnected() => _files.OnDisconnected();
+    public Core.Protocol.FileListOffer? Pending => _files.Pending;
+    public RequestResult Request(string folder) => _files.Request(folder);
+    public bool CancelAll() => _files.CancelAll();
 
     /// <summary>Tells the peer our copy limit; call on connect and whenever it changes.</summary>
     public void SendSettings()
@@ -126,6 +130,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
         if (conn is null || conn.IsClosed) return;
         try { conn.Send(new PeerSettings((int)(_fileLimitBytes() >> 20))); }
         catch (Exception e) { Log.Error(e); }
+        _files.Reannounce(); // the peer forgot our offer when the link dropped
     }
 
     void SetText(string text)
@@ -147,14 +152,6 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
             Retry(() => { Clipboard.SetDataObject(obj, true, 5, 100); return true; });
         }
         catch (ArgumentException e) { Log.Error(e); } // not a valid image
-    }
-
-    void SetFiles(IReadOnlyList<string> paths)
-    {
-        _echo.MarkReceived(Key(paths));
-        var list = new StringCollection();
-        list.AddRange(paths.ToArray());
-        Retry(() => { Clipboard.SetFileDropList(list); return true; });
     }
 
     /// <summary>Another app may hold the clipboard open for a moment.</summary>
