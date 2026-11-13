@@ -17,6 +17,7 @@ public class AppConfigTests : IDisposable
         Assert.Equal("Scroll", c.LockHotkey);
         Assert.Equal("Ctrl+Alt+Oem3", c.QuickSwitchHotkey);
         Assert.Equal(500, c.FileSizeLimitMB);
+        Assert.Equal("", c.ReceiveFolder);
         Assert.Equal(Role.Host, c.Role);
     }
 
@@ -24,7 +25,7 @@ public class AppConfigTests : IDisposable
     public void SaveLoad_RoundTrip()
     {
         var p = PathOf("sub/config.json");
-        var c = new AppConfig { Role = Role.Receiver, Password = "pw", ReceiverAddress = "192.168.0.5", AutoStart = true };
+        var c = new AppConfig { Role = Role.Receiver, Password = "pw", ReceiverAddress = "192.168.0.5", AutoStart = true, ReceiveFolder = @"D:\받기" };
         c.Placements.Add(new Placement("game/X", 10, -20));
         c.Save(p);
         var back = AppConfig.Load(p);
@@ -32,6 +33,7 @@ public class AppConfigTests : IDisposable
         Assert.Equal("pw", back.Password);
         Assert.Equal("192.168.0.5", back.ReceiverAddress);
         Assert.True(back.AutoStart);
+        Assert.Equal(@"D:\받기", back.ReceiveFolder);
         Assert.Equal(new Placement("game/X", 10, -20), Assert.Single(back.Placements));
     }
 

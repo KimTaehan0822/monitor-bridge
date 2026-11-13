@@ -16,6 +16,8 @@ public sealed class AppConfig
     public string QuickSwitchHotkey { get; set; } = "Ctrl+Alt+Oem3";
     public int FileSizeLimitMB { get; set; } = 500;
     public bool AutoStart { get; set; }
+    /// <summary>Where files copied on the other PC are saved. Empty = this PC's Downloads folder.</summary>
+    public string ReceiveFolder { get; set; } = "";
     public List<Placement> Placements { get; set; } = new();
 
     static readonly JsonSerializerOptions Json = new()
