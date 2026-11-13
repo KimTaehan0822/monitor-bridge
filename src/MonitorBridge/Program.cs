@@ -11,6 +11,8 @@ static class Program
     static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        // Right-click menu: hand the folder to the running instance and leave. Before anything that touches cursors.
+        if (PasteArgs.Folder(args) is { } pasteFolder) { Environment.Exit(Paste(pasteFolder)); return; }
         CursorHider.Restore();
         if (args.Contains("--selftest")) { SelfTest(); return; }
         int auto = Array.IndexOf(args, "--autostart");
@@ -30,6 +32,21 @@ static class Program
         Application.ThreadException += (_, e) => Log.Error(e.Exception);
         Application.ApplicationExit += (_, _) => CursorHider.Restore();
         Application.Run(new UI.TrayContext(Core.Config.AppConfig.Load(Core.Config.AppConfig.DefaultPath)));
+    }
+
+    static int Paste(string folder)
+    {
+        bool running;
+        try { running = Mutex.TryOpenExisting("MonitorBridge.SingleInstance", out var m) && m is not null; m?.Dispose(); }
+        catch (UnauthorizedAccessException) { running = true; } // it exists, owned by the elevated instance
+        if (!running)
+        {
+            MessageBox.Show("Monitor Bridge가 실행 중이 아니에요. 먼저 Monitor Bridge를 실행해 주세요.", "Monitor Bridge");
+            return 1;
+        }
+        if (PasteChannel.TrySend(PasteChannel.DefaultDir, folder)) return 0;
+        MessageBox.Show("Monitor Bridge가 응답하지 않아요. 잠시 뒤 다시 해 보거나, Monitor Bridge를 다시 실행해 주세요.", "Monitor Bridge");
+        return 1;
     }
 
     /// <summary>Renders the settings window with a sample layout to a PNG (for visual review).</summary>
