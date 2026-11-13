@@ -85,7 +85,21 @@
 <li><p>같은 이름이 이미 있으면 덮어쓰지 않고 <code>이름 (2)</code>처럼 저장합니다.</p></li>
 <li><p><strong>전송 취소</strong>: 진행 창의 <strong>[전송 취소]</strong> 또는 트레이 메뉴의 <strong>파일 전송 취소</strong>를 누릅니다. 어느 PC에서 눌러도 양쪽이 함께 멈춥니다. 반쯤 받은 파일은 자동으로 지우고, <strong>보내는 쪽의 원본 파일은 절대 지우거나 바꾸지 않습니다.</strong></p></li>
 <li><p><strong>복사 한도</strong>: 기본 500MB, 최대 100,000MB입니다. <strong>두 PC의 한도 중 작은 쪽까지만</strong> 보낼 수 있습니다. 한도가 서로 다르면 설정 창에 빨간 경고가 뜨고, 트레이 메뉴에 두 PC의 한도가 함께 보입니다.</p></li>
+<li><p><strong>전송 속도</strong>: 기본 <strong>30MB/s</strong>까지만 보냅니다. 파일이 랜선을 꽉 채우면 송출컴의 방송 업로드가 밀려서 방송이 끊길 수 있기 때문입니다. 설정 창의 <strong>파일 전송 속도</strong>에서 바꿀 수 있고(최대 1,000MB/s), <strong>0을 넣으면 제한 없이</strong> 보냅니다. <strong>두 PC 중 작은 값</strong>으로 보내며(0은 제한 없음이라 가장 큰 값으로 칩니다), 전송 중에 바꿔 저장해도 바로 적용됩니다.</p></li>
 </ul>
+<h3>속도 기준</h3>
+<ul>
+<li><p>1MB/s는 인터넷 속도로 8Mbps입니다.</p></li>
+<li><p>1기가(1000Mbps) 환경: 최대 약 110MB/s. 공유기, 랜선, 두 PC의 랜카드가 모두 1기가를 지원해야 합니다.</p></li>
+<li><p>100메가(100Mbps) 환경: 최대 약 11MB/s. 셋 중 하나라도 100메가면 전체가 100메가로 동작합니다.</p></li>
+<li><p>와이파이는 속도가 들쭉날쭉합니다.</p></li>
+<li><p>방송 업로드는 보통 1~2MB/s 정도입니다. 랜선에 자리가 남아 있어야 방송이 끊기지 않습니다.</p></li>
+</ul>
+<table><thead><tr><th>상황</th><th>추천 값</th></tr></thead><tbody>
+<tr><td>1기가(1000Mbps)를 지원하는 네트워크 환경에서 방송 중 (공유기, 랜선, 두 PC의 랜카드가 모두 1기가를 지원해야 함)</td><td>30MB/s (기본값)</td></tr>
+<tr><td>100메가 환경(이 중 하나라도 100메가), 와이파이, 잘 모를 때</td><td>5~10MB/s</td></tr>
+<tr><td>방송하지 않을 때</td><td>0 (제한 없음)</td></tr>
+</tbody></table>
 </section>
 <section><h2>설정</h2>
 <table><thead><tr><th>항목</th><th>기본값</th><th>뜻</th></tr></thead><tbody>
@@ -94,6 +108,7 @@
 <tr><td>비밀번호</td><td></td><td>두 PC에 똑같이. 연결을 암호화하는 데 씁니다</td></tr>
 <tr><td>가두기 키 / 빠른 전환 키</td><td><code>Scroll Lock</code> / <code>Ctrl+Alt+`</code></td><td>게임컴에서만. 비워 두면 그 기능은 쓰지 않음</td></tr>
 <tr><td>파일 복사 한도</td><td>500MB</td><td>최대 100,000MB. 두 PC 중 작은 쪽이 적용됨</td></tr>
+<tr><td>파일 전송 속도</td><td>30MB/s</td><td>최대 1,000. 0 = 제한 없음. 두 PC 중 작은 쪽이 적용됨. <strong>속도 기준 보기</strong>를 누르면 기준이 펼쳐짐</td></tr>
 <tr><td>자동 실행</td><td></td><td>윈도우 로그인 때 실행. 송출컴은 관리자 권한으로</td></tr>
 <tr><td>모니터 배치</td><td></td><td>게임컴에서만. 실제 책상 위 순서대로</td></tr>
 </tbody></table>
@@ -106,6 +121,7 @@
 <tr><td>주황색</td><td>가두기 켜짐</td></tr>
 <tr><td>메뉴 맨 위 <code>버전:</code> 줄</td><td>이 PC의 Monitor Bridge 버전</td></tr>
 <tr><td>복사 한도 줄</td><td>두 PC의 파일 복사 한도</td></tr>
+<tr><td>파일 전송 속도 줄</td><td>이 PC의 전송 속도. 두 PC가 다르면 양쪽 값과 실제로 쓰는 값</td></tr>
 <tr><td>파일 전송 보기 / 파일 전송 취소</td><td>진행 창 열기 / 전송 멈추기</td></tr>
 </tbody></table>
 </section>

@@ -100,6 +100,25 @@ Once the gaming PC's mouse moves onto the streaming PC's screens, you can unplug
 - Existing names are never overwritten; the copy is saved as `name (2)`.
 - **Cancel**: click **[전송 취소]** in the progress window or **파일 전송 취소** in the tray menu. Either PC stops both sides. Partly received files are deleted automatically; **the sender's original files are never deleted or changed.**
 - **Copy limit**: 500MB by default, up to 100,000MB. You can send **up to the smaller of the two PCs' limits.** When they differ, settings show a red warning and the tray menu shows both limits.
+- **Transfer speed**: files are sent at up to **30MB/s** by default. A file filling the network cable can push back the streaming PC's broadcast upload and drop the stream. Change it in **파일 전송 속도** (file transfer speed) in settings (up to 1,000MB/s); **0 means no limit**. The **smaller of the two PCs' values** is used (0 counts as the largest, since it means no limit), and a change saved mid-transfer applies right away.
+
+### Speed guide
+
+<details><summary>Show</summary>
+
+- 1MB/s is 8Mbps in internet-speed terms.
+- 1 Gigabit (1000Mbps) network: up to about 110MB/s. The router, the cables and both PCs' network cards must all support 1 Gigabit.
+- 100 Megabit (100Mbps) network: up to about 11MB/s. If any one of those three is 100 Megabit, the whole link runs at 100 Megabit.
+- Wi-Fi speed goes up and down.
+- A broadcast upload is usually about 1–2MB/s. The cable needs room left over so the stream doesn't drop.
+
+| Situation | Suggested value |
+| --- | --- |
+| Streaming on a network that supports 1 Gigabit (1000Mbps) (router, cables and both PCs' network cards all support 1 Gigabit) | 30MB/s (default) |
+| 100 Megabit network (any one part at 100 Megabit), Wi-Fi, or not sure | 5–10MB/s |
+| Not streaming | 0 (no limit) |
+
+</details>
 
 ## Settings
 
@@ -110,6 +129,7 @@ Once the gaming PC's mouse moves onto the streaming PC's screens, you can unplug
 | 비밀번호 (password) | | Same on both PCs. Used to encrypt the connection |
 | Lock key / quick-switch key | `Scroll Lock` / ``Ctrl+Alt+` `` | Gaming PC only. Leave empty to turn the feature off |
 | File copy limit | 500MB | Up to 100,000MB. The smaller of the two PCs applies |
+| 파일 전송 속도 (file transfer speed) | 30MB/s | Up to 1,000. 0 = no limit. The smaller of the two PCs applies. **속도 기준 보기** (show speed guide) opens the guide |
 | Auto start | | Starts at Windows sign-in. Streaming PC as administrator |
 | 모니터 배치 (monitor layout) | | Gaming PC only. Match your desk |
 
@@ -124,6 +144,7 @@ The connection uses TCP port `24850`.
 | Orange | Lock on |
 | `버전:` line at the top of the menu | This PC's Monitor Bridge version |
 | Limit line | Both PCs' file copy limits |
+| Speed line | This PC's transfer speed; if the PCs differ, both values and the one in use |
 | 파일 전송 보기 / 파일 전송 취소 | Open the progress window / stop the transfer |
 
 ## Troubleshooting

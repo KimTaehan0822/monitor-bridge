@@ -54,6 +54,7 @@ function toHtml(lang, cfg) {
 			continue
 		}
 		if (skipping || !inSection) continue
+		if (/^<\/?(details|summary)/.test(line)) continue // folded in the README, printed open in the PDF
 		if (line.startsWith('### ')) { closeList(); out.push(`<h3>${inline(line.slice(4))}</h3>`); continue }
 		if (line.startsWith('|')) {
 			closeList()
