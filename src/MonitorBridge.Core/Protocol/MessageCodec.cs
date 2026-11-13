@@ -35,6 +35,7 @@ public static class MessageCodec
             case FileOfferEnd x: w.Write((byte)14); w.Write(x.Id.ToByteArray()); break;
             case FileCancel x: w.Write((byte)15); w.Write(x.Id.ToByteArray()); break;
             case Ping: w.Write((byte)16); break;
+            case Highlight: w.Write((byte)17); break;
             default: throw new ArgumentException($"Unknown message {m.GetType().Name}");
         }
         w.Flush();
@@ -64,6 +65,7 @@ public static class MessageCodec
                 14 => new FileOfferEnd(ReadGuid(r)),
                 15 => new FileCancel(ReadGuid(r)),
                 16 => new Ping(),
+                17 => new Highlight(),
                 var t => throw new InvalidDataException($"Unknown message type {t}"),
             };
             return m;

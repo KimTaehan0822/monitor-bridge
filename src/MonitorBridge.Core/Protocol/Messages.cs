@@ -22,3 +22,5 @@ public sealed record FileChunk(Guid Id, byte[] Data) : Message;
 public sealed record FileOfferEnd(Guid Id) : Message;
 public sealed record FileCancel(Guid Id) : Message;
 public sealed record Ping() : Message;
+/// <summary>Show a ripple where the cursor is now, so it is easy to find after a quick switch.</summary>
+public sealed record Highlight() : Message;

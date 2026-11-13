@@ -45,6 +45,7 @@ internal sealed class TrayContext : ApplicationContext
                 _host = new HostService(_cfg, Notify);
                 _host.StatusChanged += s => OnUi(() => SetStatus(s));
                 _host.MessageReceived += _clipboard.OnMessage;
+                _host.Ripple += (x, y) => OnUi(() => RippleWindow.Play(x, y));
                 _host.Start();
             }
             else
@@ -52,6 +53,8 @@ internal sealed class TrayContext : ApplicationContext
                 _receiver = new ReceiverService(_cfg, Notify);
                 _receiver.ConnectedChanged += c => OnUi(() => SetStatus(c ? HostStatus.Connected : HostStatus.Disconnected));
                 _receiver.MessageReceived += _clipboard.OnMessage;
+                // The game PC already moved the cursor here with CursorEnter.
+                _receiver.MessageReceived += m => { if (m is Core.Protocol.Highlight) OnUi(() => { Native.Win32.GetCursorPos(out var p); RippleWindow.Play(p.X, p.Y); }); };
                 _receiver.Start();
                 SetStatus(HostStatus.Disconnected);
             }
@@ -79,7 +82,7 @@ internal sealed class TrayContext : ApplicationContext
         (_icon.Icon, _icon.Text) = s switch
         {
             HostStatus.Connected => (_connected, $"Monitor Bridge ({role}) - 연결됨"),
-            HostStatus.Locked => (_locked, $"Monitor Bridge ({role}) - 게임컴에 가둠"),
+            HostStatus.Locked => (_locked, $"Monitor Bridge ({role}) - 커서 가둠"),
             _ => (_disconnected, $"Monitor Bridge ({role}) - 연결 기다리는 중"),
         };
     }

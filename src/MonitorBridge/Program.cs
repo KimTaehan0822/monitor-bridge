@@ -17,6 +17,8 @@ static class Program
         if (auto >= 0 && auto + 1 < args.Length) { Environment.Exit(UI.AutoStart.ApplyElevated(args[auto + 1] == "on") ? 0 : 1); return; }
         int render = Array.IndexOf(args, "--render-settings");
         if (render >= 0 && render + 1 < args.Length) { RenderSettings(args[render + 1]); return; }
+        int ripple = Array.IndexOf(args, "--render-ripple");
+        if (ripple >= 0 && ripple + 1 < args.Length) { UI.RippleWindow.RenderFrames(args[ripple + 1]); return; }
 
         using var mutex = new Mutex(true, "MonitorBridge.SingleInstance", out bool first);
         if (!first)

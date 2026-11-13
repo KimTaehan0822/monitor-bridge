@@ -251,4 +251,47 @@ public class InputRouterTests
         Assert.Equal(new Message[] { new ReleaseAll(), new CursorLeave() }, res.ToRemote);
         Assert.Contains(new UnparkAndShow(0, 500), res.Local);
     }
+
+    [Fact]
+    public void RemoteLock_KeepsCursorOnStream()
+    {
+        var (r, _) = CrossToA();                       // A at virtual (1919,320), park (1280,720)
+        Assert.True(r.ToggleRemoteLock());
+        var res = r.OnMouseMove(1285, 720);            // push right, toward the game monitor
+        Assert.Equal("stream", r.ActivePcId);
+        Assert.Equal(new CursorMove(1919, 320), Assert.Single(res.ToRemote));
+        Assert.Equal(new CursorMove(1909, 320), Assert.Single(r.OnMouseMove(1270, 720).ToRemote));
+    }
+
+    [Fact]
+    public void RemoteLock_BlocksQuickSwitch_UntilUnlocked()
+    {
+        var (r, _) = CrossToA();
+        r.ToggleRemoteLock();
+        var res = r.QuickSwitch();
+        Assert.True(res.Block);
+        Assert.Empty(res.ToRemote);
+        Assert.Equal("stream", r.ActivePcId);
+        Assert.False(r.ToggleRemoteLock());
+        r.QuickSwitch();
+        Assert.Equal("game", r.ActivePcId);
+    }
+
+    [Fact]
+    public void RemoteLock_OnHost_DoesNothing()
+    {
+        var r = NewRouter();
+        Assert.False(r.ToggleRemoteLock());
+        Assert.False(r.RemoteLocked);
+    }
+
+    [Fact]
+    public void RemoteLock_ClearedWhenCursorIsSentHome()
+    {
+        var (r, _) = CrossToA();
+        r.ToggleRemoteLock();
+        r.OnSessionInterrupted();
+        Assert.Equal("game", r.ActivePcId);
+        Assert.False(r.RemoteLocked);
+    }
 }

@@ -40,6 +40,8 @@ public sealed class InputRouter
     public string ActivePcId { get; private set; }
     public VPoint Position { get; private set; }
     public bool IsRemote => ActivePcId != _hostPcId;
+    public bool RemoteLocked { get; private set; }
+    VirtualLayout? _remoteOnly;
 
     public InputRouter(VirtualLayout layout, string hostPcId, VPoint startOs)
     {
@@ -133,8 +135,10 @@ public sealed class InputRouter
     {
         int dx = x - _park.X, dy = y - _park.Y;
         if (dx == 0 && dy == 0) return RouterResult.Swallow;
-        var target = _layout.Move(Position, dx, dy);
-        var (tm, ox, oy) = _layout.ToOs(target);
+        // Locked: move on the remote monitors alone, so host edges clamp like the edge of the desk.
+        var layout = RemoteLocked ? _remoteOnly ??= OnlyPc(ActivePcId) : _layout;
+        var target = layout.Move(Position, dx, dy);
+        var (tm, ox, oy) = layout.ToOs(target);
         if (tm.Info.PcId == _hostPcId) return LeaveRemote(target, notifyRemote: true);
         // shortcut: one remote PC only; a second remote PC's monitor is treated as the same peer. Upgrade with multi-PC support.
         Position = target;
@@ -143,6 +147,7 @@ public sealed class InputRouter
 
     RouterResult LeaveRemote(VPoint hostTarget, bool notifyRemote)
     {
+        RemoteLocked = false;
         _last[ActivePcId] = Position;
         TakeHeld(); // remote side releases via ReleaseAll
         ActivePcId = _hostPcId;
@@ -202,8 +207,23 @@ public sealed class InputRouter
         Position = _layout.FromOs(_hostPcId, osX, osY) ?? Position;
     }
 
+    /// <summary>Keeps the cursor on the remote PC (the host-side lock is handled by the service). Returns the new state.</summary>
+    public bool ToggleRemoteLock()
+    {
+        RemoteLocked = IsRemote && !RemoteLocked;
+        _remoteOnly = null;
+        return RemoteLocked;
+    }
+
+    VirtualLayout OnlyPc(string pcId)
+    {
+        var ms = _layout.Monitors.Where(m => m.Info.PcId == pcId).ToList();
+        return new VirtualLayout(ms.Select(m => m.Info), ms.Select(m => new Placement(m.Info.Key, m.X, m.Y)));
+    }
+
     public RouterResult QuickSwitch()
     {
+        if (RemoteLocked) return RouterResult.Swallow;
         if (IsRemote) return LeaveRemote(LastOrCenter(_hostPcId), notifyRemote: true);
         var remote = _layout.Monitors.FirstOrDefault(m => m.Info.PcId != _hostPcId);
         if (remote is null) return RouterResult.Pass;
@@ -228,6 +248,7 @@ public sealed class InputRouter
     public RouterResult OnLayoutChanged(VirtualLayout layout)
     {
         _layout = layout;
+        _remoteOnly = null;
         if (IsRemote && _layout.MonitorAt(Position)?.Info.PcId != ActivePcId)
         {
             _last.Remove(ActivePcId);

@@ -30,8 +30,12 @@ internal sealed class HostService : IDisposable
     HashSet<string> _missingNotified = new();
     volatile PeerConnection? _conn;
     volatile bool _locked;
+    // Hook thread only. Off while disconnected: then every key and move goes straight to other apps.
+    bool _routing, _remoteLockShown;
 
     public event Action<HostStatus>? StatusChanged;
+    /// <summary>Show a ripple at this host OS point (raised on the hook thread).</summary>
+    public event Action<int, int>? Ripple;
     public event Action<Message>? MessageReceived;
     public event Action<VirtualLayout>? LayoutChanged;
     public PeerConnection? Connection => _conn;
@@ -83,6 +87,15 @@ internal sealed class HostService : IDisposable
                 var conn = new PeerConnection(ch);
                 conn.Received += OnReceived;
                 _conn = conn;
+                _hooks.Invoke(() =>
+                {
+                    // Nothing was tracked while disconnected; start from the real cursor and clean hotkey state.
+                    _lock?.Reset();
+                    _quick?.Reset();
+                    Win32.GetCursorPos(out var p);
+                    _router.Resync(p.X, p.Y);
+                    _routing = true;
+                });
                 authWarned = false;
                 Log.Info($"connected to {_cfg.ReceiverAddress}:{_cfg.Port}");
                 StatusChanged?.Invoke(_locked ? HostStatus.Locked : HostStatus.Connected);
@@ -101,7 +114,7 @@ internal sealed class HostService : IDisposable
             {
                 _conn = null;
                 _remoteMonitors = Array.Empty<MonitorInfo>();
-                _hooks.Invoke(() => Execute(_router.OnDisconnected()));
+                _hooks.Invoke(() => { _routing = false; Execute(_router.OnDisconnected()); });
                 Log.Info("disconnected");
                 StatusChanged?.Invoke(_locked ? HostStatus.Locked : HostStatus.Disconnected);
             }
@@ -157,14 +170,15 @@ internal sealed class HostService : IDisposable
 
     bool Handle(HookEvent e)
     {
+        if (!_routing) return false;
         switch (e)
         {
             case HookKey k:
                 bool lockHit = _lock?.OnKey(k.Vk, k.Down) == true;
                 bool quickHit = _quick?.OnKey(k.Vk, k.Down) == true;
-                // Lock works only on the game PC; on the stream PC the key is swallowed so nothing sticks anywhere.
-                if (lockHit) { if (!_router.IsRemote) Lock(); return true; }
-                if (quickHit) { Execute(_router.QuickSwitch()); return true; }
+                // Game PC: unhook entirely (games). Stream PC: keep routing but stop at its monitor edges.
+                if (lockHit) { if (_router.IsRemote) { _router.ToggleRemoteLock(); Execute(RouterResult.Swallow); } else Lock(); return true; }
+                if (quickHit) { QuickSwitch(); return true; }
                 return Execute(_router.OnKey(k.Scan, k.Extended, k.Down, (ushort)k.Vk));
             case HookMouseMove mv:
                 if (!_router.IsRemote) return Execute(_router.OnMouseMove(mv.X, mv.Y));
@@ -197,7 +211,24 @@ internal sealed class HostService : IDisposable
                 case Warp w: Win32.SetCursorPos(w.OsX, w.OsY); break;
             }
         }
+        // The stream-PC lock also ends whenever the cursor is sent home (disconnect, lock screen, layout change).
+        if (_router.RemoteLocked != _remoteLockShown)
+        {
+            _remoteLockShown = _router.RemoteLocked;
+            StatusChanged?.Invoke(_remoteLockShown ? HostStatus.Locked : _conn is null ? HostStatus.Disconnected : HostStatus.Connected);
+        }
         return r.Block;
+    }
+
+    void QuickSwitch()
+    {
+        var r = _router.QuickSwitch();
+        Execute(r);
+        foreach (var a in r.Local)
+        {
+            if (a is ParkAndHide) _conn?.Send(new Highlight()); // after CursorEnter, so the stream PC ripples where the cursor landed
+            else if (a is UnparkAndShow u) Ripple?.Invoke(u.OsX, u.OsY);
+        }
     }
 
     void Lock()
