@@ -18,7 +18,7 @@ static class Program
         int auto = Array.IndexOf(args, "--autostart");
         if (auto >= 0 && auto + 1 < args.Length) { Environment.Exit(UI.AutoStart.ApplyElevated(args[auto + 1] == "on") ? 0 : 1); return; }
         int render = Array.IndexOf(args, "--render-settings");
-        if (render >= 0 && render + 1 < args.Length) { RenderSettings(args[render + 1]); return; }
+        if (render >= 0 && render + 1 < args.Length) { RenderSettings(args[render + 1], args.Contains("--receiver"), args.Contains("--same-limit")); return; }
         int rc = Array.IndexOf(args, "--render-confirm");
         if (rc >= 0 && rc + 1 < args.Length)
         {
@@ -64,7 +64,7 @@ static class Program
     }
 
     /// <summary>Renders the settings window with a sample layout to a PNG (for visual review).</summary>
-    static void RenderSettings(string path)
+    static void RenderSettings(string path, bool receiver, bool sameLimit = false)
     {
         var game = new Core.Layout.MonitorInfo("game", @"\\.\DISPLAY1", 2560, 1440, 0, 0, 1.25);
         var s1 = new Core.Layout.MonitorInfo("stream", @"\\.\DISPLAY1", 1920, 1080, 0, 0, 1);
@@ -73,9 +73,12 @@ static class Program
         {
             new Core.Layout.Placement(s1.Key, 0, 180), new Core.Layout.Placement(game.Key, 1920, 0), new Core.Layout.Placement(s2.Key, 4480, 180),
         });
-        var cfg = new Core.Config.AppConfig { Password = "x", ReceiverAddress = "192.168.0.10", FileSizeLimitMB = 80000, QuickSwitchHotkey = "" };
+        var cfg = new Core.Config.AppConfig { Password = "x", ReceiverAddress = "192.168.0.10", FileSizeLimitMB = 80000, QuickSwitchHotkey = "",
+            Role = receiver ? Core.Config.Role.Receiver : Core.Config.Role.Host };
         var sample = new Core.Files.TransferProgress(false, "송출컴", "2026-11-08 23-00-51.mkv", 74_732_929_434, 18_683_232_358, 165_000, Core.Files.TransferState.Running);
-        RenderOffscreen(new UI.SettingsForm(cfg, layout, "game", remoteConnected: true, () => 500, () => sample), path);
+        var form = new UI.SettingsForm(cfg, receiver ? null : layout, "game", remoteConnected: true, () => sameLimit ? 80000 : 500, () => sample);
+        if (receiver) form.ShowLocalAddresses("이 PC의 IP: 172.30.1.5  (게임컴 설정의 '송출컴 IP'에 넣으세요)");
+        RenderOffscreen(form, path);
     }
 
     /// <summary>Draws a window to a PNG off screen, shown without activation so it never takes focus.</summary>

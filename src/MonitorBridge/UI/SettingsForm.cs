@@ -61,11 +61,21 @@ internal sealed class SettingsForm : Form
         var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        void Row(string label, Control c)
+        // Every row gets its own fixed cells. Adding in flow order would let a hidden control's neighbours slide
+        // into its cell, so labels and inputs drifted apart whenever a row was hidden (stream PC, limit warning).
+        int row = 0;
+        Label? Row(string label, Control c)
         {
-            grid.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 12, 6) });
+            Label? l = null;
+            if (label.Length > 0)
+            {
+                l = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 12, 6) };
+                grid.Controls.Add(l, 0, row);
+            }
             c.Margin = new Padding(0, 3, 0, 3);
-            grid.Controls.Add(c);
+            grid.Controls.Add(c, 1, row);
+            row++;
+            return l;
         }
         Control Inline(params Control[] cs)
         {
@@ -80,13 +90,13 @@ internal sealed class SettingsForm : Form
         roleBox.Controls.Add(_receiver);
         Row("이 PC는", roleBox);
         var addressRow = Inline(_address, Unit("포트"), _port);
-        Row("송출컴 IP", addressRow);
+        var addressLabel = Row("송출컴 IP", addressRow)!;
         Row("비밀번호", Inline(_password, Unit("두 PC에 같은 비밀번호를 넣으세요")));
         Button Clear(HotkeyBox box) { var b = new Button { Text = "지우기", AutoSize = true }; b.Click += (_, _) => box.Clear(); return b; }
         var lockRow = Inline(_lockKey, Clear(_lockKey), Unit("커서를 지금 있는 PC에 가둡니다"));
-        Row("가두기 키", lockRow);
+        var lockLabel = Row("가두기 키", lockRow)!;
         var quickRow = Inline(_quickKey, Clear(_quickKey), Unit("다른 PC로 바로 넘어갑니다"));
-        Row("빠른 전환 키", quickRow);
+        var quickLabel = Row("빠른 전환 키", quickRow)!;
         var keyHint = new Label { Text = "키를 비워 두면 그 기능은 쓰지 않아요.", AutoSize = true, ForeColor = SystemColors.GrayText };
         Row("", keyHint);
         Row("파일 복사 한도", Inline(_fileLimit, Unit($"MB까지 상대 PC로 보냅니다 (최대 {MaxFileLimitMB:N0}MB)")));
@@ -100,7 +110,7 @@ internal sealed class SettingsForm : Form
         Row("파일 전송", transferBox);
         Row("", new Label
         {
-            Text = "상대 PC에서 복사(Ctrl+C)한 파일은 탐색기에서 우클릭 → (윈도우 11은 '더 많은 옵션 표시' 또는 Shift+우클릭) →\n'" + Shared.ShellMenu.Text + "'로 가져와요.",
+            Text = "상대 PC에서 복사(Ctrl+C)한 파일은 탐색기에서 우클릭 → (윈도우 11은 '더 많은 옵션 표시'\n또는 Shift+우클릭) → '" + Shared.ShellMenu.Text + "'로 가져와요.",
             AutoSize = true,
             ForeColor = SystemColors.GrayText,
         });
@@ -108,7 +118,8 @@ internal sealed class SettingsForm : Form
         var layoutLabel = new Label { Text = "모니터를 책상 위 순서대로 끌어다 놓으세요", AutoSize = true, Margin = new Padding(0, 14, 0, 6) };
         var stack = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Location = new Point(16, 16) };
         stack.Controls.Add(grid);
-        var extra = new List<Control> { addressRow, lockRow, quickRow, keyHint };
+        // Host-only rows hide both halves; an all-hidden AutoSize row collapses to nothing.
+        var extra = new List<Control> { addressLabel, addressRow, lockLabel, lockRow, quickLabel, quickRow, keyHint };
         if (layout is not null)
         {
             _canvas = new LayoutCanvas(layout, hostPcId)
