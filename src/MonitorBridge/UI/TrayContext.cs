@@ -136,7 +136,8 @@ internal sealed class TrayContext : ApplicationContext
         var layout = _host?.Layout ?? (_cfg.Role == Role.Host || _receiver is null
             ? new Core.Layout.VirtualLayout(MonitorEnumerator.GetMonitors(), _cfg.Placements)
             : null);
-        _settings = new SettingsForm(_cfg, layout, MonitorEnumerator.PcId, _host?.Connection is not null);
+        _settings = new SettingsForm(_cfg, layout, MonitorEnumerator.PcId, _host?.Connection is not null,
+            () => _clipboard?.PeerLimitMB, VisibleProgress);
         if (_cfg.Role == Role.Receiver || string.IsNullOrEmpty(_cfg.Password)) _settings.ShowLocalAddresses($"이 PC의 IP: {string.Join(", ", LocalAddresses())}  (게임컴 설정의 '송출컴 IP'에 넣으세요)");
         try
         {

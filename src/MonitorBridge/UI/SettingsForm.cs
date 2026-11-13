@@ -1,4 +1,5 @@
 using MonitorBridge.Core.Config;
+using MonitorBridge.Core.Files;
 using MonitorBridge.Core.Layout;
 
 namespace MonitorBridge.UI;
@@ -16,7 +17,14 @@ internal sealed class SettingsForm : Form
     public const int MaxFileLimitMB = 100_000;
     readonly NumericUpDown _fileLimit = new() { Minimum = 1, Maximum = MaxFileLimitMB, Width = 80 };
     readonly CheckBox _autoStart = new() { Text = "윈도우 로그인 시 관리자 권한으로 자동 실행", AutoSize = true };
-    readonly Label _error = new() { AutoSize = true, ForeColor = ColorTranslator.FromHtml("#C0392B") };
+    static readonly Color Warn = ColorTranslator.FromHtml("#C0392B");
+    readonly Label _error = new() { AutoSize = true, ForeColor = Warn };
+    readonly Label _limitWarn = new() { AutoSize = true, ForeColor = Warn, Visible = false };
+    readonly ProgressBar _bar = new() { Width = 300, Height = 8, Style = ProgressBarStyle.Continuous, Maximum = 100 };
+    readonly Label _transfer = new() { AutoSize = true };
+    readonly System.Windows.Forms.Timer _live = new() { Interval = 1000 };
+    readonly Func<int?>? _peerLimitMB;
+    readonly Func<TransferProgress?>? _progress;
     readonly Button _save = new() { Text = "저장", AutoSize = true };
     readonly LayoutCanvas? _canvas;
     readonly Control[] _hostOnly;
@@ -24,9 +32,12 @@ internal sealed class SettingsForm : Form
 
     public AppConfig? Result { get; private set; }
 
-    public SettingsForm(AppConfig cfg, VirtualLayout? layout, string hostPcId, bool remoteConnected)
+    public SettingsForm(AppConfig cfg, VirtualLayout? layout, string hostPcId, bool remoteConnected,
+        Func<int?>? peerLimitMB = null, Func<TransferProgress?>? progress = null)
     {
         _source = cfg;
+        _peerLimitMB = peerLimitMB;
+        _progress = progress;
         Text = "Monitor Bridge 설정";
         Font = new Font("맑은 고딕", 9f);
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -76,7 +87,14 @@ internal sealed class SettingsForm : Form
         var quickRow = Inline(_quickKey, Unit("다른 PC로 바로 넘어갑니다"));
         Row("빠른 전환 키", quickRow);
         Row("파일 복사 한도", Inline(_fileLimit, Unit($"MB까지 상대 PC로 보냅니다 (최대 {MaxFileLimitMB:N0}MB)")));
+        Row("", _limitWarn);
         Row("", _autoStart);
+        var transferBox = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+        _bar.Margin = new Padding(0, 4, 0, 4);
+        _transfer.Margin = Padding.Empty;
+        transferBox.Controls.Add(_bar);
+        transferBox.Controls.Add(_transfer);
+        Row("파일 전송", transferBox);
 
         var layoutLabel = new Label { Text = "모니터를 책상 위 순서대로 끌어다 놓으세요", AutoSize = true, Margin = new Padding(0, 14, 0, 6) };
         var stack = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Location = new Point(16, 16) };
@@ -115,8 +133,41 @@ internal sealed class SettingsForm : Form
         _host.CheckedChanged += (_, _) => { ApplyRole(); UpdateState(); };
         _lockKey.ValueChanged += UpdateState;
         _quickKey.ValueChanged += UpdateState;
+        _fileLimit.ValueChanged += (_, _) => UpdateLive();
+        _live.Tick += (_, _) => UpdateLive();
+        _live.Start();
         ApplyRole();
         UpdateState();
+        UpdateLive();
+    }
+
+    /// <summary>Limit mismatch and transfer progress; both change while the window is open.</summary>
+    void UpdateLive()
+    {
+        int own = (int)_fileLimit.Value;
+        if (_peerLimitMB?.Invoke() is { } peer && peer != own)
+        {
+            _limitWarn.Text = $"상대 PC 한도는 {peer:N0}MB예요. 작은 쪽({Math.Min(own, peer):N0}MB)까지만 보낼 수 있어요.";
+            _limitWarn.Visible = true;
+        }
+        else _limitWarn.Visible = false;
+
+        var p = _progress?.Invoke();
+        _bar.Visible = p is not null;
+        if (p is not null)
+        {
+            int v = p.Total <= 0 ? 0 : (int)Math.Clamp(p.Done * 100 / p.Total, 0, 100);
+            // Windows animates a bar only when it grows; stepping past and back shows the real value at once.
+            if (v < 100) { _bar.Value = v + 1; _bar.Value = v; } else _bar.Value = 100;
+        }
+        _transfer.Text = p?.Describe() ?? "전송 중인 파일이 없어요";
+        _transfer.ForeColor = p is null ? SystemColors.GrayText : p.State == TransferState.Failed ? Warn : SystemColors.ControlText;
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _live.Dispose();
+        base.Dispose(disposing);
     }
 
     void ApplyRole()
