@@ -120,7 +120,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
     public int? PeerLimitMB => _files.PeerLimitMB;
     public void OnDisconnected() => _files.OnDisconnected();
     public Core.Protocol.FileListOffer? Pending => _files.Pending;
-    public RequestResult Request(string folder) => _files.Request(folder);
+    public RequestResult Request(string folder, Guid offerId) => _files.Request(folder, offerId);
     public bool CancelAll() => _files.CancelAll();
 
     /// <summary>Tells the peer our copy limit; call on connect and whenever it changes.</summary>

@@ -26,6 +26,7 @@ internal sealed class TrayContext : ApplicationContext
     long _finishedAt;
     string? _clickPath; // what clicking the current balloon opens
     IDisposable? _pasteChannel;
+    bool _asking; // one paste question at a time (several selected folders launch several requests)
     string PeerName => _cfg.Role == Role.Host ? "송출컴" : "게임컴";
 
     public TrayContext(AppConfig cfg)
@@ -161,14 +162,26 @@ internal sealed class TrayContext : ApplicationContext
     /// <summary>Right-click "붙여넣기" in Explorer landed here with the folder it was used on.</summary>
     void OnPaste(string folder)
     {
+        if (_asking) return;
+        if (!Directory.Exists(folder))
+        {
+            // Quick access, libraries and similar views pass a virtual location, not a folder.
+            Notify("이 위치에는 붙여넣을 수 없어요. 일반 폴더나 바탕화면에서 우클릭해 주세요.");
+            return;
+        }
         if (_clipboard?.Pending is not { } offer)
         {
             Notify("상대 PC에서 복사한 파일이 없어요. 상대 PC에서 파일을 먼저 복사(Ctrl+C)해 주세요.");
             return;
         }
-        if (!PasteConfirm.Ask(PeerName, offer, folder)) return;
-        switch (_clipboard.Request(folder))
+        bool yes;
+        _asking = true;
+        try { yes = PasteConfirm.Ask(PeerName, offer, folder); }
+        finally { _asking = false; }
+        if (!yes || _clipboard is null) return;
+        switch (_clipboard.Request(folder, offer.Id))
         {
+            case RequestResult.Changed: Notify("그 사이에 상대 PC에서 다른 파일을 복사했어요. 다시 우클릭해서 가져와 주세요."); break;
             case RequestResult.Busy: Notify("이미 파일을 주고받는 중이에요. 끝나거나 취소한 뒤에 다시 가져와 주세요."); break;
             case RequestResult.TooBig: Notify("파일이 복사 한도보다 커서 가져올 수 없어요. 두 PC 설정의 파일 복사 한도를 확인해 주세요."); break;
             case RequestResult.NothingOffered: Notify("상대 PC에서 복사한 파일이 없어요. 상대 PC에서 파일을 먼저 복사(Ctrl+C)해 주세요."); break;

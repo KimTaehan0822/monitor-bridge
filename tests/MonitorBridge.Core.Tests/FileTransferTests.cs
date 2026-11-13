@@ -26,7 +26,8 @@ public class FileTransferTests : IDisposable
 
     FileTransfer New(long limit = 1L << 30) =>
         new(() => limit, "게임컴", n => { lock (_lock) _notices.Add(n); }, (paths, _) => _saved = paths,
-            m => { lock (_lock) _replies.Add(m); }, SendBulk, legacyTempRoot: Path.Combine(_dir, "no-legacy"));
+            m => { lock (_lock) _replies.Add(m); }, SendBulk, legacyTempRoot: Path.Combine(_dir, "no-legacy"),
+            stagingRecord: Path.Combine(_dir, "staging.txt"));
 
     async ValueTask SendBulk(Message m, CancellationToken ct)
     {
@@ -61,7 +62,7 @@ public class FileTransferTests : IDisposable
         var t = New(limit);
         var id = Guid.NewGuid();
         t.OnMessage(new FileListOffer(id, 1, size, "a.txt"));
-        Assert.Equal(RequestResult.Started, t.Request(folder));
+        Assert.Equal(RequestResult.Started, t.Request(folder, id));
         return (t, id);
     }
 
@@ -156,7 +157,7 @@ public class FileTransferTests : IDisposable
 
     [Fact]
     public void RequestWithoutOffer_ReturnsNothingOffered() =>
-        Assert.Equal(RequestResult.NothingOffered, New().Request(Folder("dest")));
+        Assert.Equal(RequestResult.NothingOffered, New().Request(Folder("dest"), Guid.NewGuid()));
 
     [Fact]
     public void Withdrawn_ClearsPending()
@@ -171,8 +172,9 @@ public class FileTransferTests : IDisposable
     public void Request_OverLimit_IsTooBig()
     {
         var t = New(limit: 5);
-        t.OnMessage(new FileListOffer(Guid.NewGuid(), 1, 10, "a.txt"));
-        Assert.Equal(RequestResult.TooBig, t.Request(Folder("dest")));
+        var id = Guid.NewGuid();
+        t.OnMessage(new FileListOffer(id, 1, 10, "a.txt"));
+        Assert.Equal(RequestResult.TooBig, t.Request(Folder("dest"), id));
         Assert.Empty(_replies);
     }
 
@@ -185,7 +187,7 @@ public class FileTransferTests : IDisposable
         Stream(t, id, "a.txt", new byte[] { 1, 2, 3 });
         Assert.Equal(new[] { Path.Combine(dest, "a.txt") }, _saved);
         Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(Path.Combine(dest, "a.txt")));
-        Assert.Empty(Directory.EnumerateDirectories(Path.Combine(dest, FileReceiver.StagingFolderName)));
+        Assert.False(Directory.Exists(Path.Combine(dest, FileReceiver.StagingFolderName))); // no trace left
         Assert.Equal(TransferState.Done, t.Progress!.State);
     }
 
@@ -197,8 +199,9 @@ public class FileTransferTests : IDisposable
         t.OnMessage(new FileOfferStart(id, 6, 1));
         t.OnMessage(new FileEntry(id, "a.txt", false, 6));
         t.OnMessage(new FileChunk(id, new byte[3]));
-        t.OnMessage(new FileListOffer(Guid.NewGuid(), 1, 1, "b.txt"));
-        Assert.Equal(RequestResult.Busy, t.Request(dest));
+        var second = Guid.NewGuid();
+        t.OnMessage(new FileListOffer(second, 1, 1, "b.txt"));
+        Assert.Equal(RequestResult.Busy, t.Request(dest, second));
         t.OnMessage(new FileChunk(id, new byte[3]));
         t.OnMessage(new FileOfferEnd(id));
         Assert.True(File.Exists(Path.Combine(dest, "a.txt"))); // the first one still finished
@@ -213,7 +216,7 @@ public class FileTransferTests : IDisposable
         _replies.Clear();
         Assert.True(t.CancelAll());
         Assert.Equal(new FileCancel(id), Assert.Single(_replies));
-        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(dest, FileReceiver.StagingFolderName)));
+        Assert.False(Directory.Exists(Path.Combine(dest, FileReceiver.StagingFolderName)));
         Assert.False(File.Exists(Path.Combine(dest, "a.txt")));
     }
 
@@ -224,7 +227,7 @@ public class FileTransferTests : IDisposable
         var (t, id) = Requested(dest, 100);
         Stream(t, id, "a.txt", new byte[40], end: false);
         t.OnMessage(new FileCancel(id));
-        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(dest, FileReceiver.StagingFolderName)));
+        Assert.False(Directory.Exists(Path.Combine(dest, FileReceiver.StagingFolderName)));
         Assert.Equal(TransferState.Cancelled, t.Progress!.State);
     }
 
@@ -263,5 +266,77 @@ public class FileTransferTests : IDisposable
         Assert.True(File.Exists(staged));                                   // nothing deleted
         Assert.Contains(_notices, n => n.Contains(Path.GetDirectoryName(staged)!));
         Assert.Null(_saved);
+    }
+
+    // ---- review fixes ----
+
+    [Fact]
+    public void Disconnect_KeepsPendingOffer_UntilThePeerSaysOtherwise()
+    {
+        var t = New();
+        var id = Guid.NewGuid();
+        t.OnMessage(new FileListOffer(id, 1, 3, "a.txt"));
+        t.OnDisconnected();                      // our 1s timer may notice the drop after the peer re-announced
+        Assert.Equal(id, t.Pending!.Id);
+    }
+
+    [Fact]
+    public void Reannounce_SendsTheSameOffer_OrAnEmptyOne()
+    {
+        var t = New();
+        t.Reannounce();
+        Assert.Equal(new FileListOffer(Guid.Empty, 0, 0, ""), Assert.Single(_replies));
+        t.Offer(new[] { Source("a.txt", 10) });
+        var until = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < until) { lock (_lock) if (_replies.Count >= 2) break; Thread.Sleep(10); }
+        FileListOffer offer;
+        lock (_lock) offer = (FileListOffer)_replies[1];
+        lock (_lock) _replies.Clear();
+        t.Reannounce();
+        Assert.Equal(offer, Assert.Single(_replies)); // same id: a request already on its way still matches
+    }
+
+    [Fact]
+    public void Request_StaleOffer_IsRefused()
+    {
+        var t = New();
+        var shown = Guid.NewGuid();
+        t.OnMessage(new FileListOffer(shown, 1, 3, "a.txt"));
+        t.OnMessage(new FileListOffer(Guid.NewGuid(), 1, 70, "big"));   // copied again while the question was open
+        Assert.Equal(RequestResult.Changed, t.Request(Folder("dest"), shown));
+        Assert.Empty(_replies);
+    }
+
+    [Fact]
+    public void OfferThenWithdraw_LastWordIsWithdraw()
+    {
+        var t = New();
+        for (int i = 0; i < 20; i++) { t.Offer(new[] { Source($"f{i}.txt", 10) }); t.Withdraw(); }
+        Thread.Sleep(300);
+        lock (_lock) Assert.Equal(new FileListOffer(Guid.Empty, 0, 0, ""), _replies[^1]);
+    }
+
+    [Fact]
+    public void CrashLeftovers_AreCleanedOnNextStart()
+    {
+        var dest = Folder("dest");
+        var (t, id) = Requested(dest, 100);
+        Stream(t, id, "a.txt", new byte[40], end: false);   // then the program dies mid-transfer
+        var staging = Path.Combine(dest, FileReceiver.StagingFolderName);
+        Assert.True(Directory.Exists(staging));
+        New();                                               // next start
+        Assert.False(Directory.Exists(staging));
+    }
+
+    [Fact]
+    public void SendFailsUnexpectedly_TellsTheReceiver()
+    {
+        var t = new FileTransfer(() => 1L << 30, "게임컴", _ => { }, (_, _) => { }, m => { lock (_lock) _replies.Add(m); },
+            (_, _) => throw new InvalidOperationException("boom"), legacyTempRoot: Path.Combine(_dir, "no-legacy"),
+            stagingRecord: Path.Combine(_dir, "staging.txt"));
+        t.Offer(new[] { Source("a.txt", 10) });
+        var offer = WaitFor<FileListOffer>(_replies);
+        t.OnMessage(new FileRequest(offer.Id));
+        Assert.Equal(new FileCancel(offer.Id), WaitFor<FileCancel>(_replies)); // otherwise the receiver waits forever
     }
 }

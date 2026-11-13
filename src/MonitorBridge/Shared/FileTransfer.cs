@@ -4,7 +4,7 @@ using Message = MonitorBridge.Core.Protocol.Message;
 
 namespace MonitorBridge.Shared;
 
-internal enum RequestResult { Started, NothingOffered, Busy, TooBig }
+internal enum RequestResult { Started, NothingOffered, Changed, Busy, TooBig }
 
 /// <summary>
 /// Copy announces, paste fetches: copying files only tells the peer what is on offer; the files travel when the
@@ -30,6 +30,7 @@ internal sealed class FileTransfer
     int _offerSeq;
     Guid _offerId;
     IReadOnlyList<string>? _offerPaths;
+    FileListOffer? _offerMsg;
     CancellationTokenSource? _sending;
     Guid _sendingId;
 
@@ -41,6 +42,8 @@ internal sealed class FileTransfer
     Guid _rxId;
     long _rxRemaining;
     string _rxDest = "";
+    string _rxStaging = "";
+    readonly string _stagingRecord;
     readonly HashSet<string> _rxTops = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The peer's copy limit in MB, once it has told us (null = unknown).</summary>
@@ -51,8 +54,10 @@ internal sealed class FileTransfer
     /// <param name="sendBulk">Queues a file message behind cursor traffic.</param>
     public FileTransfer(Func<long> limitBytes, string peerName, Action<string> notify,
         Action<IReadOnlyList<string>, string> onSaved, Action<Message> reply,
-        Func<Message, CancellationToken, ValueTask> sendBulk, string? legacyTempRoot = null)
+        Func<Message, CancellationToken, ValueTask> sendBulk, string? legacyTempRoot = null, string? stagingRecord = null)
     {
+        _stagingRecord = stagingRecord ?? Path.Combine(Path.GetDirectoryName(Core.Config.AppConfig.DefaultPath)!, "receiving.txt");
+        CleanRecordedStaging();
         _limitBytes = limitBytes;
         _peerName = peerName;
         _notify = notify;
@@ -65,6 +70,36 @@ internal sealed class FileTransfer
     }
 
     public TransferProgress? Progress { get { lock (_gate) return _track.Current; } }
+
+    /// <summary>A crash or power cut mid-receive leaves half a file in the chosen folder; remove it on the next start.</summary>
+    void CleanRecordedStaging()
+    {
+        try
+        {
+            if (!File.Exists(_stagingRecord)) return;
+            foreach (var staging in File.ReadAllLines(_stagingRecord).Where(l => l.Length > 0).Distinct())
+            {
+                FileReceiver.CleanupExcept(staging, null); // kept (.keep) folders survive
+                RemoveIfEmpty(staging);
+            }
+            File.Delete(_stagingRecord);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Error(e); }
+    }
+
+    static void RemoveIfEmpty(string staging)
+    {
+        try { if (Directory.Exists(staging) && !Directory.EnumerateFileSystemEntries(staging).Any()) Directory.Delete(staging); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Error(e); }
+    }
+
+    /// <summary>Caller holds _gate. Drops the receive in progress and leaves no trace in the chosen folder.</summary>
+    void DropRx()
+    {
+        _rx?.Cancel();
+        _rx = null;
+        if (_rxStaging.Length > 0) RemoveIfEmpty(_rxStaging);
+    }
 
     /// <summary>What the peer has copied and we could fetch, or null.</summary>
     public FileListOffer? Pending { get { lock (_gate) return _pending; } }
@@ -95,8 +130,10 @@ internal sealed class FileTransfer
                     if (seq != _offerSeq) return; // a newer copy won
                     _offerId = entries.Count > 0 ? id : Guid.Empty;
                     _offerPaths = entries.Count > 0 ? copy : null;
+                    _offerMsg = entries.Count > 0 ? new FileListOffer(id, copy.Length, total, NameOf(copy)) : null;
+                    // Sent under the same lock as the check, so a late offer can never overtake a newer copy.
+                    _reply(_offerMsg ?? new FileListOffer(Guid.Empty, 0, 0, ""));
                 }
-                _reply(entries.Count > 0 ? new FileListOffer(id, copy.Length, total, NameOf(copy)) : new FileListOffer(Guid.Empty, 0, 0, ""));
             }
             catch (Exception e) { Log.Error(e); }
         });
@@ -110,16 +147,18 @@ internal sealed class FileTransfer
             _offerSeq++;
             _offerId = Guid.Empty;
             _offerPaths = null;
+            _offerMsg = null;
+            _reply(new FileListOffer(Guid.Empty, 0, 0, ""));
         }
-        _reply(new FileListOffer(Guid.Empty, 0, 0, ""));
     }
 
-    /// <summary>After a reconnect the peer has forgotten our offer; tell it again.</summary>
+    /// <summary>
+    /// On (re)connect: tell the peer what is on offer, or that nothing is, so it never keeps a stale list.
+    /// The same id is re-sent, so a request already on its way still matches.
+    /// </summary>
     public void Reannounce()
     {
-        IReadOnlyList<string>? paths;
-        lock (_gate) paths = _offerPaths;
-        if (paths is not null) Offer(paths);
+        lock (_gate) _reply(_offerMsg ?? new FileListOffer(Guid.Empty, 0, 0, ""));
     }
 
     void StartSend(Guid id, IReadOnlyList<string> paths)
@@ -197,6 +236,8 @@ internal sealed class FileTransfer
                     failed = _track.Finish(true, id, TransferState.Failed);
                     if (ReferenceEquals(_sending, cts)) _sending = null;
                 }
+                // If the link is still up, the receiver must not be left waiting for files that will not come.
+                try { _reply(new FileCancel(id)); } catch (Exception e2) { Log.Error(e2); }
                 if (failed) _notify(DisconnectedNotice);
             }
         });
@@ -217,12 +258,14 @@ internal sealed class FileTransfer
     // ---------------- receiver ----------------
 
     /// <summary>Right-click paste: ask the peer for what it offered, to be saved into <paramref name="folder"/>.</summary>
-    public RequestResult Request(string folder)
+    /// <param name="offerId">The offer the person saw in the question; a newer copy since then is not fetched.</param>
+    public RequestResult Request(string folder, Guid offerId)
     {
         Guid id;
         lock (_gate)
         {
             if (_pending is null) return RequestResult.NothingOffered;
+            if (_pending.Id != offerId) return RequestResult.Changed;
             if (_rx is not null || _requestedId != Guid.Empty) return RequestResult.Busy;
             long? peer = PeerLimitMB is { } p ? p * MiB : null;
             if (_pending.TotalBytes > TransferProgress.EffectiveLimit(_limitBytes(), peer)) return RequestResult.TooBig;
@@ -249,10 +292,9 @@ internal sealed class FileTransfer
             }
             if (_rx is not null)
             {
-                _rx.Cancel(); // only the hidden staging copy; nothing outside it
                 _track.Finish(false, _rxId, TransferState.Cancelled);
                 _reply(new FileCancel(_rxId));
-                _rx = null;
+                DropRx(); // only the hidden staging copy; nothing outside it
                 received = true;
             }
             if (_requestedId != Guid.Empty)
@@ -275,9 +317,8 @@ internal sealed class FileTransfer
         {
             _sending?.Cancel();
             _sending = null;
-            _rx?.Cancel();
-            _rx = null;
-            _pending = null;
+            DropRx();
+            // _pending stays: the peer may already have re-announced on the new link. Its Reannounce replaces it.
             _requestedId = Guid.Empty;
             failed = _track.FailAll();
         }
@@ -326,7 +367,10 @@ internal sealed class FileTransfer
                             _reply(new FileCancel(s.Id));
                             return;
                         }
+                        try { File.AppendAllLines(_stagingRecord, new[] { staging }); } // so a crash is cleaned up next start
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Log.Error(ex); }
                         _rx = new FileReceiver(staging, s.Id);
+                        _rxStaging = staging;
                         _rxDest = dest;
                         _rxId = s.Id;
                         _rxRemaining = s.TotalBytes;
@@ -358,8 +402,7 @@ internal sealed class FileTransfer
                             _rx = null;
                             break;
                         }
-                        _rx.Cancel(); // only the emptied staging folder is left; remove it
-                        _rx = null;
+                        DropRx(); // only the emptied staging folder is left; remove it
                         _track.Finish(false, end.Id, TransferState.Done);
                         _onSaved(saved, _rxDest);
                         break;
@@ -370,8 +413,7 @@ internal sealed class FileTransfer
                         _sending = null;
                         break;
                     case FileCancel c when _rx is not null && c.Id == _rxId:
-                        _rx.Cancel();
-                        _rx = null;
+                        DropRx();
                         _track.Finish(false, c.Id, TransferState.Cancelled);
                         _notify("상대 PC에서 파일 전송을 멈췄어요. 받던 파일은 지웠어요.");
                         break;
@@ -389,8 +431,7 @@ internal sealed class FileTransfer
                     _track.Finish(false, _rxId, TransferState.Failed);
                     _reply(new FileCancel(_rxId));
                 }
-                _rx?.Cancel();
-                _rx = null;
+                DropRx();
                 _notify("상대 PC에서 온 파일을 받지 못했어요: " + ex.Message);
             }
         }
