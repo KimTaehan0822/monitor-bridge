@@ -38,6 +38,16 @@ public sealed record TransferProgress(bool Sending, string PeerName, string Name
     /// <summary>Both PCs check their own limit, so the smaller one decides. Unknown peer (old build, not yet told): ours.</summary>
     public static long EffectiveLimit(long own, long? peer) => peer is { } p ? Math.Min(own, p) : own;
 
+    /// <summary>The speed both PCs allow (MB/s): the smaller one, where 0 means no limit. Unknown peer: own.</summary>
+    public static int EffectiveSpeed(int ownMBps, int? peerMBps)
+    {
+        static int Cap(int v) => v <= 0 ? int.MaxValue : v;
+        int m = Math.Min(Cap(ownMBps), Cap(peerMBps ?? 0));
+        return m == int.MaxValue ? 0 : m;
+    }
+
+    public static string SpeedText(int mbps) => mbps <= 0 ? "제한 없음" : $"{mbps}MB/s";
+
     /// <summary>Windows rejects tray tooltips longer than 127 characters.</summary>
     public static string Tooltip(string status, string? progress)
     {

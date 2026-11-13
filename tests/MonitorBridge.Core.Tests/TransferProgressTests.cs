@@ -50,6 +50,27 @@ public class TransferProgressTests
     public void EffectiveLimit_TakesSmaller() => Assert.Equal(500, TransferProgress.EffectiveLimit(80000, 500));
 
     [Fact]
+    public void EffectiveSpeed_UnknownPeer_UsesOwn() => Assert.Equal(30, TransferProgress.EffectiveSpeed(30, null));
+
+    [Theory]
+    [InlineData(30, 10, 10)]
+    [InlineData(0, 10, 10)]   // 0 = no limit, so the peer's number wins
+    [InlineData(30, 0, 30)]
+    [InlineData(0, 0, 0)]
+    public void EffectiveSpeed_TakesSmaller_ZeroIsUnlimited(int own, int peer, int expected) =>
+        Assert.Equal(expected, TransferProgress.EffectiveSpeed(own, peer));
+
+    [Fact]
+    public void EffectiveSpeed_UnknownPeer_Unlimited() => Assert.Equal(0, TransferProgress.EffectiveSpeed(0, null));
+
+    [Fact]
+    public void SpeedText_Formats()
+    {
+        Assert.Equal("제한 없음", TransferProgress.SpeedText(0));
+        Assert.Equal("30MB/s", TransferProgress.SpeedText(30));
+    }
+
+    [Fact]
     public void Tooltip_IsCappedAt127()
     {
         Assert.Equal("상태\n진행", TransferProgress.Tooltip("상태", "진행"));
