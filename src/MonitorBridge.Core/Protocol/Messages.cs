@@ -26,3 +26,7 @@ public sealed record Ping() : Message;
 public sealed record Highlight() : Message;
 /// <summary>This PC's settings the peer needs to know: its file copy limit (MB).</summary>
 public sealed record PeerSettings(int FileLimitMB) : Message;
+/// <summary>"I copied these files" — names and size only. Count 0 withdraws the earlier offer.</summary>
+public sealed record FileListOffer(Guid Id, int Count, long TotalBytes, string FirstName) : Message;
+/// <summary>"Send me the files you offered" (right-click paste on the other PC).</summary>
+public sealed record FileRequest(Guid Id) : Message;

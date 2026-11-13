@@ -20,6 +20,8 @@ public class MessageCodecTests
         new ReleaseAll(),
         new Highlight(),
         new PeerSettings(500),
+        new FileListOffer(Guid.Parse("11111111-2222-3333-4444-555555555555"), 3, 74_732_929_434, "녹화.mkv"),
+        new FileRequest(Guid.Parse("11111111-2222-3333-4444-555555555555")),
         new ClipboardText("한글 text 😀"),
         new ClipboardImage(new byte[] { 0x89, 0x50, 0x4E, 0x47 }),
         new FileOfferStart(Id, 123_456_789_012, 3),
