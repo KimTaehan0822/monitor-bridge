@@ -24,11 +24,15 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
     // shortcut: unbounded, relies on disk being faster than the LAN; bound it if slow disks show memory growth.
     readonly Channel<Message> _fileQueue = Channel.CreateUnbounded<Message>(new UnboundedChannelOptions { SingleReader = true });
 
-    public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, Action<string> notify)
+    readonly Func<long> _fileLimitBytes;
+
+    /// <param name="peerName">"게임컴" or "송출컴": the other PC, as people call it in notices.</param>
+    public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, string peerName, Action<string> notify)
     {
         _conn = conn;
+        _fileLimitBytes = fileLimitBytes;
         _ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Create on the UI thread");
-        _files = new FileTransfer(fileLimitBytes, notify, paths => _ui.Post(_ => SetFiles(paths), null));
+        _files = new FileTransfer(fileLimitBytes, peerName, notify, paths => _ui.Post(_ => SetFiles(paths), null));
         CreateHandle(new CreateParams { Parent = new IntPtr(-3) }); // HWND_MESSAGE: invisible message-only window
         Win32.AddClipboardFormatListener(Handle);
         _ = Task.Run(async () =>
@@ -97,7 +101,21 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
             case ClipboardText t: _ui.Post(_ => SetText(t.Text), null); break;
             case ClipboardImage i: _ui.Post(_ => SetImage(i.Png), null); break;
             case FileOfferStart or FileEntry or FileChunk or FileOfferEnd or FileCancel: _fileQueue.Writer.TryWrite(m); break;
+            case PeerSettings ps: _files.PeerLimitMB = ps.FileLimitMB; break;
         }
+    }
+
+    public Core.Files.TransferProgress? Progress => _files.Progress;
+    public int? PeerLimitMB => _files.PeerLimitMB;
+    public void OnDisconnected() => _files.OnDisconnected();
+
+    /// <summary>Tells the peer our copy limit; call on connect and whenever it changes.</summary>
+    public void SendSettings()
+    {
+        var conn = _conn();
+        if (conn is null || conn.IsClosed) return;
+        try { conn.Send(new PeerSettings((int)(_fileLimitBytes() >> 20))); }
+        catch (Exception e) { Log.Error(e); }
     }
 
     void SetText(string text)

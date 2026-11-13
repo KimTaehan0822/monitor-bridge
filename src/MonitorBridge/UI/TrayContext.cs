@@ -44,7 +44,7 @@ internal sealed class TrayContext : ApplicationContext
     {
         try
         {
-            _clipboard = new ClipboardSync(() => (_host?.Connection ?? _receiver?.Connection), () => (long)_cfg.FileSizeLimitMB * 1024 * 1024, Notify);
+            _clipboard = new ClipboardSync(() => (_host?.Connection ?? _receiver?.Connection), () => (long)_cfg.FileSizeLimitMB * 1024 * 1024, _cfg.Role == Role.Host ? "송출컴" : "게임컴", Notify);
             if (_cfg.Role == Role.Host)
             {
                 _host = new HostService(_cfg, Notify);
