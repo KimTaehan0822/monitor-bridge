@@ -24,10 +24,10 @@ public class FileTransferTests : IDisposable
         try { Directory.Delete(_dir, true); } catch (IOException) { }
     }
 
-    FileTransfer New(long limit = 1L << 30) =>
+    FileTransfer New(long limit = 1L << 30, int? speedMBps = null) =>
         new(() => limit, "게임컴", n => { lock (_lock) _notices.Add(n); }, (paths, _) => _saved = paths,
             m => { lock (_lock) _replies.Add(m); }, SendBulk, legacyTempRoot: Path.Combine(_dir, "no-legacy"),
-            stagingRecord: Path.Combine(_dir, "staging.txt"));
+            stagingRecord: Path.Combine(_dir, "staging.txt"), speedMBps: speedMBps is { } v ? () => v : null);
 
     async ValueTask SendBulk(Message m, CancellationToken ct)
     {
@@ -151,6 +151,52 @@ public class FileTransferTests : IDisposable
         lock (_lock) Assert.Contains(new FileCancel(offer.Id), _replies);
         Assert.Equal(before.Item1, File.ReadAllBytes(src));
         Assert.Equal(before.Item2, File.GetLastWriteTimeUtc(src));
+    }
+
+    /// <summary>Offers one file, asks for it, and returns how long the whole send took.</summary>
+    async Task<TimeSpan> TimedSend(FileTransfer t, string src)
+    {
+        t.Offer(new[] { src });
+        var offer = WaitFor<FileListOffer>(_replies);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        t.OnMessage(new FileRequest(offer.Id));
+        await _ended.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        return sw.Elapsed;
+    }
+
+    [Fact]
+    public async Task PacedSend_TakesAtLeastTheLimit()
+    {
+        var src = Source("paced.bin", 3 << 19); // 1.5MiB at 1MB/s
+        var took = await TimedSend(New(speedMBps: 1), src);
+        Assert.True(took >= TimeSpan.FromMilliseconds(1000), took.ToString());
+        lock (_lock) Assert.Equal(File.ReadAllBytes(src), _bulk.OfType<FileChunk>().SelectMany(c => c.Data).ToArray());
+    }
+
+    [Fact]
+    public async Task PeerSpeed_Smaller_Wins()
+    {
+        var t = New(speedMBps: 0);
+        t.PeerSpeedMBps = 1;
+        var took = await TimedSend(t, Source("peer.bin", 3 << 19));
+        Assert.True(took >= TimeSpan.FromMilliseconds(1000), took.ToString());
+    }
+
+    [Fact]
+    public void Cancel_DuringPacedSend_StopsQuickly()
+    {
+        var src = Source("slow.bin", 10 << 20);
+        var before = File.ReadAllBytes(src);
+        var t = New(speedMBps: 1);
+        t.Offer(new[] { src });
+        var offer = WaitFor<FileListOffer>(_replies);
+        t.OnMessage(new FileRequest(offer.Id));
+        Thread.Sleep(200);
+        Assert.True(t.CancelAll());
+        var until = DateTime.UtcNow.AddMilliseconds(1000);
+        while (DateTime.UtcNow < until && t.Progress?.State != TransferState.Cancelled) Thread.Sleep(10);
+        Assert.Equal(TransferState.Cancelled, t.Progress?.State);
+        Assert.Equal(before, File.ReadAllBytes(src));
     }
 
     // ---- receiver ----

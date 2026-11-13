@@ -23,6 +23,7 @@ internal sealed class FileTransfer
     readonly Action<IReadOnlyList<string>, string> _onSaved;
     readonly Action<Message> _reply;
     readonly Func<Message, CancellationToken, ValueTask> _sendBulk;
+    readonly Func<int>? _speedMBps; // this PC's send limit, read per chunk so a saved change applies at once
     readonly object _gate = new();
     readonly TransferTracker _track; // guarded by _gate
 
@@ -49,13 +50,18 @@ internal sealed class FileTransfer
     /// <summary>The peer's copy limit in MB, once it has told us (null = unknown).</summary>
     public int? PeerLimitMB { get; set; }
 
+    /// <summary>The peer's send speed limit in MB/s (0 = none), once it has told us (null = unknown).</summary>
+    public int? PeerSpeedMBps { get; set; }
+
     /// <param name="onSaved">Saved items' final paths and their folder; the caller tells the person.</param>
     /// <param name="reply">Sends a small message to the peer right away.</param>
     /// <param name="sendBulk">Queues a file message behind cursor traffic.</param>
     public FileTransfer(Func<long> limitBytes, string peerName, Action<string> notify,
         Action<IReadOnlyList<string>, string> onSaved, Action<Message> reply,
-        Func<Message, CancellationToken, ValueTask> sendBulk, string? legacyTempRoot = null, string? stagingRecord = null)
+        Func<Message, CancellationToken, ValueTask> sendBulk, string? legacyTempRoot = null, string? stagingRecord = null,
+        Func<int>? speedMBps = null)
     {
+        _speedMBps = speedMBps;
         _stagingRecord = stagingRecord ?? Path.Combine(Path.GetDirectoryName(Core.Config.AppConfig.DefaultPath)!, "receiving.txt");
         CleanRecordedStaging();
         _limitBytes = limitBytes;
@@ -197,6 +203,7 @@ internal sealed class FileTransfer
                 foreach (var e in entries)
                     await _sendBulk(new FileEntry(id, e.RelativePath.Replace('/', '\\'), e.IsDirectory, e.Length), cts.Token);
                 var buf = new byte[ChunkSize];
+                var pacer = new SpeedPacer(() => Environment.TickCount64);
                 foreach (var e in entries.Where(e => !e.IsDirectory))
                 {
                     long left = e.Length;
@@ -208,6 +215,8 @@ internal sealed class FileTransfer
                         if (n == 0) throw new IOException($"{e.FullPath} 파일이 보내는 도중 바뀌었어요");
                         await _sendBulk(new FileChunk(id, buf[..n]), cts.Token);
                         lock (_gate) _track.Advance(true, id, n);
+                        int wait = pacer.DelayMs(n, TransferProgress.EffectiveSpeed(_speedMBps?.Invoke() ?? 0, PeerSpeedMBps));
+                        if (wait > 0) await Task.Delay(wait, cts.Token);
                         left -= n;
                     }
                 }
