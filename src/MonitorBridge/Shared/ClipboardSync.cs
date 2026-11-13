@@ -36,7 +36,13 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
         _fileLimitBytes = fileLimitBytes;
         _ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Create on the UI thread");
         _files = new FileTransfer(fileLimitBytes, receiveFolder, peerName, notify,
-            (paths, dest) => _ui.Post(_ => { SetFiles(paths); Saved?.Invoke(paths, dest); }, null));
+            (paths, dest) => _ui.Post(_ => { SetFiles(paths); Saved?.Invoke(paths, dest); }, null),
+            m =>
+            {
+                var c = _conn();
+                if (c is null || c.IsClosed) return;
+                try { c.Send(m); } catch (Exception e) { Log.Error(e); }
+            });
         CreateHandle(new CreateParams { Parent = new IntPtr(-3) }); // HWND_MESSAGE: invisible message-only window
         Win32.AddClipboardFormatListener(Handle);
         _ = Task.Run(async () =>

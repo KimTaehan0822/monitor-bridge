@@ -79,4 +79,31 @@ public class FileReceiverMoveTests : IDisposable
         Assert.Empty(Directory.EnumerateFileSystemEntries(Dest).Where(p => Path.GetFileName(p) != FileReceiver.StagingFolderName));
         Assert.Empty(Directory.EnumerateFileSystemEntries(staging));
     }
+
+    [Fact]
+    public void MoveInto_LockedItem_StaysWhereItIs()
+    {
+        var src = Make(Src, "locked.mkv", "data");
+        using (new FileStream(src, FileMode.Open, FileAccess.Read, FileShare.None)) // antivirus or indexer holding it
+        {
+            var moved = FileReceiver.MoveInto(new[] { src }, Dest, out var notMoved, retryDelayMs: 1);
+            Assert.Empty(moved);
+            Assert.Equal(new[] { src }, notMoved);
+        }
+        Assert.True(File.Exists(src)); // the received data is never thrown away
+    }
+
+    [Fact]
+    public void CleanupExcept_SkipsKeptFolders()
+    {
+        var staging = Path.Combine(Dest, FileReceiver.StagingFolderName);
+        var kept = new FileReceiver(staging, Guid.NewGuid());
+        kept.Add(new FileEntry(Guid.Empty, "a.txt", false, 0));
+        kept.KeepForUser();
+        var junk = new FileReceiver(staging, Guid.NewGuid());
+        junk.Add(new FileEntry(Guid.Empty, "b.txt", false, 0));
+        FileReceiver.CleanupExcept(staging, null);
+        Assert.True(File.Exists(Path.Combine(kept.Root, "a.txt")));
+        Assert.False(Directory.Exists(junk.Root));
+    }
 }

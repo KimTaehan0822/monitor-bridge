@@ -95,12 +95,19 @@ public sealed class FileReceiver
     }
 
     /// <summary>Moves finished items into the save folder without overwriting or merging anything there.</summary>
-    public static IReadOnlyList<string> MoveInto(IReadOnlyList<string> tops, string dest)
+    public static IReadOnlyList<string> MoveInto(IReadOnlyList<string> tops, string dest) => MoveInto(tops, dest, out _);
+
+    /// <summary>
+    /// Same, but an item that stays locked (antivirus, indexer) is left where it is and listed in
+    /// <paramref name="notMoved"/>: received data is never thrown away because a move failed.
+    /// </summary>
+    public static IReadOnlyList<string> MoveInto(IReadOnlyList<string> tops, string dest, out IReadOnlyList<string> notMoved, int retryDelayMs = 300)
     {
         var moved = new List<string>();
+        var left = new List<string>();
         foreach (var src in tops)
         {
-            for (int attempt = 0; ; attempt++)
+            for (int attempt = 1; ; attempt++)
             {
                 var target = UniqueName(dest, Path.GetFileName(src));
                 try
@@ -110,11 +117,27 @@ public sealed class FileReceiver
                     moved.Add(target);
                     break;
                 }
-                catch (IOException) when (attempt < 5) { } // the name was taken just now; try the next number
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    // A name taken just now, or a scanner briefly holding the file: wait and try again.
+                    if (attempt >= 5) { left.Add(src); break; }
+                    Thread.Sleep(retryDelayMs);
+                }
             }
         }
+        notMoved = left;
         return moved;
     }
+
+    /// <summary>Marker that keeps a staging folder from being cleaned up: it holds files the person still needs.</summary>
+    public const string KeepMarker = ".keep";
+
+    /// <summary>This transfer's staging folder.</summary>
+    public string Root => _root;
+
+    /// <summary>Protects this folder from <see cref="CleanupExcept"/> (used when moving the files out failed).</summary>
+    public void KeepForUser() =>
+        File.WriteAllText(Path.Combine(_root, KeepMarker), "Monitor Bridge가 옮기지 못한 받은 파일이에요. 필요한 파일을 꺼낸 뒤 이 폴더를 지워 주세요.");
 
     public static void CleanupExcept(string tempRoot, Guid? keep)
     {
@@ -123,6 +146,7 @@ public sealed class FileReceiver
         foreach (var d in Directory.GetDirectories(tempRoot))
         {
             if (Path.GetFileName(d) == keepName) continue;
+            if (File.Exists(Path.Combine(d, KeepMarker))) continue;
             try { Directory.Delete(d, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }

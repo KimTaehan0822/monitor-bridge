@@ -21,6 +21,7 @@ internal sealed class FileTransfer
     readonly Action<string> _notify;
     readonly Func<string> _receiveFolder;
     readonly Action<IReadOnlyList<string>, string> _onSaved;
+    readonly Action<Message> _reply;
     readonly object _gate = new();
     CancellationTokenSource? _sending;
     Guid _sendingId;
@@ -36,9 +37,11 @@ internal sealed class FileTransfer
     public int? PeerLimitMB { get; set; }
 
     /// <param name="onSaved">Saved items' final paths and the folder they went to; the caller tells the person.</param>
+    /// <param name="reply">Sends a message back to the peer (used to refuse an offer so the sender stops).</param>
     public FileTransfer(Func<long> limitBytes, Func<string> receiveFolder, string peerName, Action<string> notify,
-        Action<IReadOnlyList<string>, string> onSaved)
+        Action<IReadOnlyList<string>, string> onSaved, Action<Message> reply, string? legacyTempRoot = null)
     {
+        _reply = reply;
         _limitBytes = limitBytes;
         _receiveFolder = receiveFolder;
         _peerName = peerName;
@@ -46,7 +49,7 @@ internal sealed class FileTransfer
         _onSaved = onSaved;
         _track = new TransferTracker(peerName);
         // Old builds received into %TEMP%; anything still there would never be found, so clear it once.
-        FileReceiver.CleanupExcept(TempRoot, null);
+        FileReceiver.CleanupExcept(legacyTempRoot ?? TempRoot, null);
         try { FileReceiver.CleanupExcept(Path.Combine(receiveFolder(), FileReceiver.StagingFolderName), null); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { Log.Error(e); }
     }
@@ -164,6 +167,7 @@ internal sealed class FileTransfer
                         if (s.TotalBytes < 0 || s.TotalBytes > _limitBytes())
                         {
                             _notify($"파일이 이 PC 한도({_limitBytes() / MiB:N0}MB)보다 커서 받지 않았어요. 설정에서 한도를 올려 주세요.");
+                            _reply(new FileCancel(s.Id)); // otherwise the sender streams it all for nothing
                             return;
                         }
                         var dest = _receiveFolder();
@@ -179,6 +183,7 @@ internal sealed class FileTransfer
                         {
                             Log.Error(ex);
                             _notify($"받은 파일 저장 폴더({dest})에 쓸 수 없어서 받지 않았어요. 설정에서 폴더를 바꿔 주세요.");
+                            _reply(new FileCancel(s.Id));
                             return;
                         }
                         _rx = new FileReceiver(staging, s.Id);
@@ -203,11 +208,27 @@ internal sealed class FileTransfer
                         break;
                     case FileOfferEnd end when _rx is not null && end.Id == _rxId:
                         var tops = _rx.Complete();
-                        var saved = FileReceiver.MoveInto(tops, _rxDest);
+                        var saved = FileReceiver.MoveInto(tops, _rxDest, out var notMoved);
+                        if (notMoved.Count > 0)
+                        {
+                            // Never delete what arrived: keep it, protect it from cleanup and say where it is.
+                            _rx.KeepForUser();
+                            _track.Finish(false, end.Id, TransferState.Failed);
+                            _notify($"받은 파일을 저장 폴더로 옮기지 못했어요. 파일은 {_rx.Root} 폴더에 그대로 있어요. 직접 옮겨 주세요.");
+                            _rx = null;
+                            break;
+                        }
                         _rx.Cancel(); // only the emptied staging folder is left; remove it
                         _rx = null;
                         _track.Finish(false, end.Id, TransferState.Done);
                         _onSaved(saved, _rxDest);
+                        break;
+                    case FileCancel refused when _sending is not null && refused.Id == _sendingId:
+                        // The receiver turned our offer down (limit or save folder); it shows the reason itself.
+                        if (_track.Finish(true, refused.Id, TransferState.Failed))
+                            _notify("상대 PC가 파일을 받지 않았어요. 상대 PC에 뜬 알림을 확인해 주세요.");
+                        _sending.Cancel();
+                        _sending = null;
                         break;
                     case FileCancel cancel when _rx is not null && cancel.Id == _rxId:
                         _rx.Cancel();

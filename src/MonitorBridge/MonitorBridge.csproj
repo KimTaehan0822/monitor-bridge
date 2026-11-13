@@ -24,4 +24,7 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="MonitorBridge.Core.Tests" />
+  </ItemGroup>
 </Project>
