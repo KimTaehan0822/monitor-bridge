@@ -24,3 +24,5 @@ public sealed record FileCancel(Guid Id) : Message;
 public sealed record Ping() : Message;
 /// <summary>Show a ripple where the cursor is now, so it is easy to find after a quick switch.</summary>
 public sealed record Highlight() : Message;
+/// <summary>This PC's settings the peer needs to know: its file copy limit (MB).</summary>
+public sealed record PeerSettings(int FileLimitMB) : Message;

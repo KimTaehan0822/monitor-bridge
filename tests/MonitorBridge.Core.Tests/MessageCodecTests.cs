@@ -19,6 +19,7 @@ public class MessageCodecTests
         new Key(0x72, false, true, 0x15),
         new ReleaseAll(),
         new Highlight(),
+        new PeerSettings(500),
         new ClipboardText("한글 text 😀"),
         new ClipboardImage(new byte[] { 0x89, 0x50, 0x4E, 0x47 }),
         new FileOfferStart(Id, 123_456_789_012, 3),
