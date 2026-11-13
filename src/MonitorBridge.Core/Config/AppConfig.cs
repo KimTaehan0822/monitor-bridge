@@ -15,6 +15,8 @@ public sealed class AppConfig
     public string LockHotkey { get; set; } = "Scroll";
     public string QuickSwitchHotkey { get; set; } = "Ctrl+Alt+Oem3";
     public int FileSizeLimitMB { get; set; } = 500;
+    /// <summary>Most MB/s this PC sends files at; 0 = no limit. Keeps room on the LAN for the broadcast upload.</summary>
+    public int FileSpeedLimitMBps { get; set; } = 30;
     public bool AutoStart { get; set; }
     public List<Placement> Placements { get; set; } = new();
 

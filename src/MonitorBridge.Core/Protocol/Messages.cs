@@ -32,5 +32,7 @@ public sealed record FileListOffer(Guid Id, int Count, long TotalBytes, string F
 public sealed record FileRequest(Guid Id) : Message;
 /// <summary>Sent on connect: which build this PC runs, so a mismatch can be shown instead of breaking the link.</summary>
 public sealed record Hello(string Build) : Message;
+/// <summary>This PC's file send speed limit (MB/s, 0 = none). Its own type so older builds simply ignore it.</summary>
+public sealed record PeerSpeed(int MBps) : Message;
 /// <summary>A message type from a newer build. Decoded as this and ignored, so the link stays up.</summary>
 public sealed record UnknownMessage(byte Type) : Message;

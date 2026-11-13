@@ -40,6 +40,7 @@ public static class MessageCodec
             case FileListOffer x: w.Write((byte)19); w.Write(x.Id.ToByteArray()); w.Write(x.Count); w.Write(x.TotalBytes); w.Write(x.FirstName); break;
             case FileRequest x: w.Write((byte)20); w.Write(x.Id.ToByteArray()); break;
             case Hello x: w.Write((byte)21); w.Write(x.Build); break;
+            case PeerSpeed x: w.Write((byte)22); w.Write(x.MBps); break;
             case UnknownMessage x: w.Write(x.Type); break; // tests only
             default: throw new ArgumentException($"Unknown message {m.GetType().Name}");
         }
@@ -75,6 +76,7 @@ public static class MessageCodec
                 19 => new FileListOffer(ReadGuid(r), r.ReadInt32(), r.ReadInt64(), r.ReadString()),
                 20 => new FileRequest(ReadGuid(r)),
                 21 => new Hello(r.ReadString()),
+                22 => new PeerSpeed(r.ReadInt32()),
                 // A newer build: skip it instead of dropping the link (and with it mouse and keyboard).
                 var t => new UnknownMessage(t),
             };
