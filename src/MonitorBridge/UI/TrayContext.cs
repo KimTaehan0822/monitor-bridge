@@ -203,7 +203,6 @@ internal sealed class TrayContext : ApplicationContext
                 // The services hold this same _cfg object, so update it rather than replacing it.
                 _cfg.FileSizeLimitMB = next.FileSizeLimitMB;
                 _cfg.AutoStart = next.AutoStart;
-                _cfg.ReceiveFolder = next.ReceiveFolder;
                 if (_host is not null) _host.ApplyLayout(next.Placements);
                 else _cfg.Placements = next.Placements;
                 _cfg.Save(AppConfig.DefaultPath);

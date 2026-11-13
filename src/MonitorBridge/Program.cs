@@ -73,7 +73,7 @@ static class Program
         {
             new Core.Layout.Placement(s1.Key, 0, 180), new Core.Layout.Placement(game.Key, 1920, 0), new Core.Layout.Placement(s2.Key, 4480, 180),
         });
-        var cfg = new Core.Config.AppConfig { Password = "x", ReceiverAddress = "192.168.0.10", FileSizeLimitMB = 80000 };
+        var cfg = new Core.Config.AppConfig { Password = "x", ReceiverAddress = "192.168.0.10", FileSizeLimitMB = 80000, QuickSwitchHotkey = "" };
         var sample = new Core.Files.TransferProgress(false, "송출컴", "2026-11-08 23-00-51.mkv", 74_732_929_434, 18_683_232_358, 165_000, Core.Files.TransferState.Running);
         RenderOffscreen(new UI.SettingsForm(cfg, layout, "game", remoteConnected: true, () => 500, () => sample), path);
     }
