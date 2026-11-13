@@ -119,7 +119,7 @@
 
 **Interfaces:**
 - Consumes: `SpeedText`, `EffectiveSpeed`, `AppConfig.FileSpeedLimitMBps`.
-- Produces: 생성자 인자 `Func<int?>? peerSpeedMBps` (`peerLimitMB` 바로 뒤); `public const int MaxSpeedMBps = 1_000;`.
+- Produces: 생성자 맨 끝 선택 인자 `Func<int?>? peerSpeedMBps = null` (`progress` 뒤, 기존 호출 순서가 안 밀리게); `public const int MaxSpeedMBps = 1_000;`.
 
 - [ ] **Step 1: 구현**
   - `NumericUpDown _speedLimit` (Minimum 0, Maximum `MaxSpeedMBps`, Width 80), 값은 `Math.Clamp(cfg.FileSpeedLimitMBps, 0, MaxSpeedMBps)`, `Result`에 `FileSpeedLimitMBps = (int)_speedLimit.Value`.
