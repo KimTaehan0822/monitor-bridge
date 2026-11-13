@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Monitor Bridge 取扱説明書 (日本語)</title>
+<link rel="stylesheet" href="manual.css">
+</head>
+<body>
+<h1>Monitor Bridge 取扱説明書 (日本語)</h1>
+<p><time datetime="2026-11-14">2026-11-14 (v0.1.0)</time></p>
+<p>ゲーミングPCのキーボードとマウス1組で、配信PCまで操作できる Windows 用プログラムです。Input Director に似ていますが、<strong>モニターごとに自由に配置</strong>できます。</p>
+<p>例: 机の上が <code>配信1 | ゲーム | 配信2</code> の順なら、カーソルもその順に移ります。1台のPCにモニターを3台つないだように使えます。</p>
+<ul>
+<li><p>マウス・キーボードの共有（ゲーミングPC → 配信PC）</p></li>
+<li><p>クリップボード共有（双方向）: テキスト、画像、ファイル</p></li>
+<li><p>ロックキー: カーソルを今いるPCから出さない（ゲーム中に）</p></li>
+<li><p>クイック切り替えキー: キー1つで相手のPCへ移動。着いた場所に波紋が広がり、カーソルを見つけやすい</p></li>
+<li><p>接続中、カーソルがゲーミングPCにある間は配信PCのカーソルを隠す（配信画面に矢印が残らない）</p></li>
+</ul>
+<p>プログラムの画面は韓国語です。以下では韓国語の表示をそのまま載せ、意味を添えています。</p>
+<p>作成者: <strong>김탄2</strong></p>
+<section><h2>必要なもの</h2>
+<ul>
+<li><p>Windows 10 以降の 64 ビット PC 2台（ゲーミングPC 1台、配信PC 1台）</p></li>
+<li><p>2台が同じルーター（LAN）につながっていること</p></li>
+<li><p>最初の設定のときだけ配信PCに挿すキーボードとマウス</p></li>
+</ul>
+<p>.NET を別途インストールする必要はありません（exe に入っています）。</p>
+</section>
+<section><h2>クイックスタート</h2>
+<h3>1. 配信PCにキーボードとマウスを一時的に挿す</h3>
+<p>最初の設定は配信PCで直接行います。このプログラムが起動して接続するまでは、ゲーミングPCから配信PCを操作できません。設定が済んだら外してかまいません。</p>
+<h3>2. Input Director などのプログラムを終了する</h3>
+<p>Input Director、Mouse Without Borders、Barrier などと<strong>同時に動かすと入力が混乱します。</strong> 両方のPCで終了するか削除してください。</p>
+<h3>3. 両方のPCで <code>MonitorBridge.exe</code> を起動する</h3>
+<p>exe を好きなフォルダーに置いて起動します。初回は設定ウィンドウが開きます。</p>
+<p><strong>配信PCで:</strong></p>
+<ol>
+<li><p><strong>이 PC는</strong>（このPCは）で <strong>송출컴</strong>（配信PC）を選びます。</p></li>
+<li><p><strong>비밀번호</strong>（パスワード）を決めて入力します。ゲーミングPCにも同じものを入れます。</p></li>
+<li><p>ウィンドウ下に出る <strong>이 PC의 IP</strong>（このPCのIP）を控えます（例: <code>192.168.0.10</code>）。</p></li>
+<li><p><strong>윈도우 로그인 시 관리자 권한으로 자동 실행</strong>（Windows サインイン時に管理者として自動起動）をオンにして保存します。管理者の確認が出たら <strong>はい</strong> を押します。</p></li>
+<li><p>ファイアウォールの <strong>アクセスを許可</strong> が出たら <strong>プライベート ネットワーク</strong> にチェックして許可します。</p></li>
+</ol>
+<p><strong>ゲーミングPCで:</strong></p>
+<ol>
+<li><p><strong>이 PC는</strong> で <strong>게임컴</strong>（ゲーミングPC）を選びます。</p></li>
+<li><p><strong>송출컴 IP</strong>（配信PCのIP）に控えたIPを入れます。</p></li>
+<li><p><strong>비밀번호</strong> に配信PCと同じパスワードを入れます。</p></li>
+<li><p>保存すると配信PCに接続します。タスクバー右のアイコンが<strong>青緑色</strong>になれば接続済みです。</p></li>
+</ol>
+<h3>4. モニターを机の上と同じ配置にする</h3>
+<p>ゲーミングPCのトレイアイコンをダブルクリックすると設定が開きます。下の <strong>모니터 배치</strong>（モニター配置）で、モニターの四角を実際の机の順にドラッグして保存します。</p>
+<ul>
+<li><p>青緑はゲーミングPCのモニター、紺は配信PCのモニターです。</p></li>
+<li><p>近づけると隣のモニターにぴったり付きます。</p></li>
+<li><p>赤い枠はモニターが重なっている印です。横にずらしてください。</p></li>
+</ul>
+<h3>5. 確認したら配信PCのキーボードとマウスを外す</h3>
+<p>ゲーミングPCのマウスで配信PCの画面まで行き来できたら、配信PCのキーボードとマウスは外してかまいません。</p>
+</section>
+<section><h2>ショートカット</h2>
+<table><thead><tr><th>機能</th><th>既定のキー</th><th>説明</th></tr></thead><tbody>
+<tr><td>ロック（가두기）</td><td><code>Scroll Lock</code></td><td>カーソルを今のPCに閉じ込めます。もう一度押すと解除。ロック中はトレイアイコンがオレンジで、クイック切り替えも止まります</td></tr>
+<tr><td>クイック切り替え（빠른 전환）</td><td><code>Ctrl + Alt + `</code></td><td>相手のPCへすぐ移ります。そのPCで最後にいた場所に移り、そこに波紋が少し広がります。配信PCの波紋は配信画面にも一瞬映ります</td></tr>
+</tbody></table>
+<ul>
+<li><p><strong>キーの変更</strong>: 設定で入力欄をクリックすると色が変わり「새 키를 누르세요」（新しいキーを押してください）と出ます。その間は今のショートカットが動かないので、使いたいキーを押すだけです（Esc: 取り消し）。</p></li>
+<li><p><strong>使わない</strong>: 欄を空にすると（<strong>[지우기]</strong>（消去）ボタン、または欄を押して Backspace）、その機能はオフになり、キーも横取りしません。</p></li>
+<li><p>ゲーミングPCでロックすると、このプログラムはキーボードとマウスの監視を完全に止めるので、ゲームに影響しません。</p></li>
+<li><p>配信PCでロックすると、カーソルは配信PCのモニターから出ません。このときは<strong>配信PCの Windows のディスプレイ配置</strong>に従って動くので、机の上で配信モニターの間にゲーミングモニターがあっても配信モニター同士は行き来できます。</p></li>
+<li><p>未接続のときは、ショートカットを含むすべてのキーとマウスに触れません。同じキーを使う他のプログラムもそのまま動きます。</p></li>
+</ul>
+</section>
+<section><h2>ファイルを移す</h2>
+<ol>
+<li><p>送る側のPCでファイルやフォルダーをコピー（Ctrl+C）します。<strong>コピーだけでは何も送られません。</strong> 相手のPCに「こういうファイルをコピーした」という一覧を知らせるだけです。</p></li>
+<li><p>受け取る側のPCのエクスプローラーで、入れたいフォルダー（またはデスクトップ）の空いている所を<strong>右クリック</strong>します。<br>Windows 11 では <strong>その他のオプションを確認</strong> を押すか、最初から <strong>Shift+右クリック</strong> します。</p></li>
+<li><p><strong>Monitor Bridge: 상대 PC에서 복사한 파일 여기에 붙여넣기</strong>（相手のPCでコピーしたファイルをここに貼り付け）を押します。</p></li>
+<li><p>カーソルの横に「이 폴더로 가져올까요?」（このフォルダーに取り込みますか?）が出たら <strong>[가져오기]</strong>（取り込む）を押します。そこから転送が始まります。</p></li>
+<li><p>始まると通知が出ます。<strong>トレイアイコンか通知を押すと</strong>進行ウィンドウが開きます（進行率、残り時間、取り消しボタン）。配信画面に映らないよう、自動では開きません。</p></li>
+<li><p>終わると「다 받았어요」（受け取りました）の通知が出て、押すとそのフォルダーが開きます。</p></li>
+</ol>
+<ul>
+<li><p>普段の Ctrl+V の貼り付けには触れません。</p></li>
+<li><p>同じ名前があれば上書きせず <code>名前 (2)</code> のように保存します。</p></li>
+<li><p><strong>転送の取り消し</strong>: 進行ウィンドウの <strong>[전송 취소]</strong> か、トレイメニューの <strong>파일 전송 취소</strong> を押します。どちらのPCで押しても両方が止まります。途中まで受け取ったファイルは自動で削除し、<strong>送る側の元のファイルは決して削除・変更しません。</strong></p></li>
+<li><p><strong>コピー上限</strong>: 既定 500MB、最大 100,000MB。<strong>2台の上限のうち小さいほうまで</strong>送れます。上限が違うと設定に赤い警告が出て、トレイメニューに両方の上限が表示されます。</p></li>
+</ul>
+</section>
+<section><h2>設定</h2>
+<table><thead><tr><th>項目</th><th>既定値</th><th>意味</th></tr></thead><tbody>
+<tr><td>이 PC는（このPCは）</td><td></td><td>게임컴（ゲーミングPC、キーボードとマウスがある側）か 송출컴（配信PC）</td></tr>
+<tr><td>송출컴 IP（配信PCのIP）</td><td></td><td>ゲーミングPCのみ。配信PCの設定に出るIP</td></tr>
+<tr><td>비밀번호（パスワード）</td><td></td><td>両方のPCで同じに。接続の暗号化に使います</td></tr>
+<tr><td>ロックキー / クイック切り替えキー</td><td><code>Scroll Lock</code> / <code>Ctrl+Alt+`</code></td><td>ゲーミングPCのみ。空にするとその機能はオフ</td></tr>
+<tr><td>ファイルコピー上限</td><td>500MB</td><td>最大 100,000MB。2台のうち小さいほうが使われます</td></tr>
+<tr><td>自動起動</td><td></td><td>Windows サインイン時に起動。配信PCは管理者として</td></tr>
+<tr><td>모니터 배치（モニター配置）</td><td></td><td>ゲーミングPCのみ。実際の机と同じ順に</td></tr>
+</tbody></table>
+<p>接続には TCP ポート <code>24850</code> を使います。</p>
+</section>
+<section><h2>トレイアイコン</h2>
+<table><thead><tr><th>色 / メニュー</th><th>意味</th></tr></thead><tbody>
+<tr><td>青緑</td><td>接続中</td></tr>
+<tr><td>灰色</td><td>未接続</td></tr>
+<tr><td>オレンジ</td><td>ロック中</td></tr>
+<tr><td>メニュー先頭の <code>버전:</code> の行</td><td>このPCの Monitor Bridge のバージョン</td></tr>
+<tr><td>上限の行</td><td>2台のファイルコピー上限</td></tr>
+<tr><td>파일 전송 보기 / 파일 전송 취소</td><td>進行ウィンドウを開く / 転送を止める</td></tr>
+</tbody></table>
+</section>
+<section><h2>よくあるトラブル</h2>
+<table><thead><tr><th>症状</th><th>原因</th><th>対処</th></tr></thead><tbody>
+<tr><td>接続できない（アイコンが灰色）</td><td>配信PCで起動していない、ファイアウォール、IP変更</td><td>配信PCで起動を確認 →「Windows Defender ファイアウォール → アプリを許可」で MonitorBridge を許可（または TCP 24850 を開く）→ 配信PCのIPを再確認（ルーターで固定すると便利）</td></tr>
+<tr><td>「비밀번호가 달라서 연결하지 못했어요」（パスワード不一致）</td><td>パスワードが違う</td><td>両方に同じパスワードを入れ直す</td></tr>
+<tr><td>「두 PC의 Monitor Bridge 버전이 달라요」（バージョン違い）</td><td>片方だけ更新した</td><td>キーボードとマウスはそのまま使えます。両方を同じバージョンに</td></tr>
+<tr><td>配信PCのサインイン画面を操作できない</td><td>プログラムはサインイン後に起動する</td><td>配信PCの自動サインインをオンにするか、サインイン時だけキーボードを挿す</td></tr>
+<tr><td>OBS など一部のプログラムがクリックできない</td><td>そのプログラムが管理者として動いている</td><td>配信PCの設定で <strong>관리자 권한으로 자동 실행</strong> をオンにして再起動</td></tr>
+<tr><td>右クリックの項目がない</td><td>Windows 11 の新しいメニュー、または一度も起動していない</td><td><strong>その他のオプションを確認</strong> か Shift+右クリック、Monitor Bridge を一度起動</td></tr>
+<tr><td>「Monitor Bridge가 실행 중이 아니에요」（起動していない）</td><td>そのPCで終了している</td><td>そのPCで先に起動</td></tr>
+<tr><td>ファイルコピーができない</td><td>上限超え、空き容量不足</td><td>2台の上限を確認。受信中は対象フォルダー内の隠しフォルダー（<code>.MonitorBridge-받는중</code>）に先に書くので、その分の空きが必要</td></tr>
+<tr><td>受け取ったファイルをフォルダーに移せない</td><td>ウイルス対策などがファイルを掴んでいる</td><td>ファイルは削除せず、通知に出た隠しフォルダーにそのまま残します</td></tr>
+<tr><td>配信PCのカーソルが見えない</td><td>接続中なら正常</td><td>ゲーミングPCのカーソルが移ってくると見えます。異常終了の後なら Monitor Bridge をもう一度起動</td></tr>
+<tr><td>Ctrl+Alt+Del の後でキーが押されたまま</td><td>その画面ではキーを離した信号が見えない</td><td>Ctrl と Alt を一度ずつ押して離す</td></tr>
+</tbody></table>
+<p>問題があれば <code>%AppData%\MonitorBridge\log.txt</code> を確認してください。設定は同じフォルダーの <code>config.json</code> に保存されます。</p>
+</section>
+<section><h2>対応していないこと</h2>
+<ul>
+<li><p>UAC（管理者の確認）画面、Ctrl+Alt+Del 画面、サインイン画面の操作</p></li>
+<li><p>配信PCに移った状態でのゲーム（ゲームはゲーミングPCで、ロックキーをオンに）</p></li>
+<li><p>3台以上のPC</p></li>
+<li><p>同じルーター（LAN）の外からの接続</p></li>
+</ul>
+</section>
+<section><h2>新しいバージョンへの更新</h2>
+<ol>
+<li><p>両方のPCでトレイから Monitor Bridge を終了します。</p></li>
+<li><p>両方のPCの <code>MonitorBridge.exe</code> を新しいファイルで上書きします。元の場所に上書きすると、ファイアウォールの許可と自動起動がそのまま残ります。</p></li>
+<li><p>配信PC、ゲーミングPCの順にもう一度起動します。</p></li>
+</ol>
+<p>バージョンが違ってもキーボードとマウスの接続は切れませんが、新機能の一部が動かないことがあるので、両方を同じバージョンにしてください。</p>
+</section>
+<section><h2>表示</h2>
+<p>このプログラムは MIT ライセンスで配布されます（<code>LICENSE</code> を参照）。exe に同梱している .NET ランタイムの表示は <code>THIRD-PARTY-NOTICES.txt</code> にあります。Input Director、Mouse Without Borders、Barrier は各開発者のプログラムで、このプログラムはそれらとは関係のない非公式プロジェクトです。</p>
+</section>
+<section><h2>お問い合わせ</h2>
+<p>使用中に問題や質問があれば、作成者（김탄2）にお問い合わせください。</p>
+<ul>
+<li><p>Discord: kimtan2</p></li>
+<li><p>チジジク（Chzzk）: 김탄2</p></li>
+</ul>
+</section>
+</body>
+</html>

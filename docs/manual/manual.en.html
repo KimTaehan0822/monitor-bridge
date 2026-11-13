@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Monitor Bridge Manual (English)</title>
+<link rel="stylesheet" href="manual.css">
+</head>
+<body>
+<h1>Monitor Bridge Manual (English)</h1>
+<p><time datetime="2026-11-14">2026-11-14 (v0.1.0)</time></p>
+<p>A Windows program that lets one keyboard and mouse on your gaming PC also control your streaming PC. It is similar to Input Director, but you can <strong>arrange every monitor freely</strong>.</p>
+<p>Example: if your desk has <code>Stream 1 | Game | Stream 2</code>, the cursor crosses in that order. It feels like one PC with three monitors.</p>
+<ul>
+<li><p>Mouse and keyboard sharing (gaming PC → streaming PC)</p></li>
+<li><p>Shared clipboard (both ways): text, images, files</p></li>
+<li><p>Lock key: keep the cursor on the PC it is on (for gaming)</p></li>
+<li><p>Quick-switch key: jump to the other PC with one key. A ripple at the landing spot helps you find the cursor</p></li>
+<li><p>While connected and the cursor is on the gaming PC, the streaming PC's cursor is hidden (no arrow left on the broadcast)</p></li>
+</ul>
+<p>The program's screens are in Korean. Korean labels are shown below as they appear, with their meaning.</p>
+<p>Made by: <strong>김탄2</strong></p>
+<section><h2>Requirements</h2>
+<ul>
+<li><p>Two 64-bit PCs with Windows 10 or later (one gaming PC, one streaming PC)</p></li>
+<li><p>Both PCs on the same router (LAN)</p></li>
+<li><p>A keyboard and mouse for the streaming PC, only during first setup</p></li>
+</ul>
+<p>You don't need to install .NET; it is inside the exe.</p>
+</section>
+<section><h2>Quick start</h2>
+<h3>1. Plug a keyboard and mouse into the streaming PC for now</h3>
+<p>First setup must be done on the streaming PC itself. Until the program runs and connects, the gaming PC cannot control it. Unplug them when you're done.</p>
+<h3>2. Close programs like Input Director</h3>
+<p>Running Input Director, Mouse Without Borders, Barrier and similar tools <strong>at the same time tangles the input.</strong> Close or remove them on both PCs.</p>
+<h3>3. Run <code>MonitorBridge.exe</code> on both PCs</h3>
+<p>Put the exe in any folder and run it. The settings window opens the first time.</p>
+<p><strong>On the streaming PC:</strong></p>
+<ol>
+<li><p>In <strong>이 PC는</strong> (This PC is), choose <strong>송출컴</strong> (streaming PC).</p></li>
+<li><p>Enter a <strong>비밀번호</strong> (password). The gaming PC needs the same one.</p></li>
+<li><p>Note the <strong>이 PC의 IP</strong> (this PC's IP) at the bottom of the window (e.g. <code>192.168.0.10</code>).</p></li>
+<li><p>Turn on <strong>윈도우 로그인 시 관리자 권한으로 자동 실행</strong> (start as administrator at Windows sign-in) and save. Click <strong>Yes</strong> on the admin prompt.</p></li>
+<li><p>When the firewall's <strong>Allow access</strong> window appears, tick <strong>Private networks</strong> and allow.</p></li>
+</ol>
+<p><strong>On the gaming PC:</strong></p>
+<ol>
+<li><p>In <strong>이 PC는</strong>, choose <strong>게임컴</strong> (gaming PC).</p></li>
+<li><p>Enter the streaming PC's IP in <strong>송출컴 IP</strong>.</p></li>
+<li><p>Enter the same <strong>비밀번호</strong> as the streaming PC.</p></li>
+<li><p>Save to connect. When the icon at the right of the taskbar turns <strong>teal</strong>, you're connected.</p></li>
+</ol>
+<h3>4. Arrange the monitors like your desk</h3>
+<p>Double-click the gaming PC's tray icon to open settings. In <strong>모니터 배치</strong> (monitor layout) at the bottom, drag the monitor boxes into the order on your desk and save.</p>
+<ul>
+<li><p>Teal boxes are gaming PC monitors; navy boxes are streaming PC monitors.</p></li>
+<li><p>A box snaps to its neighbor when dragged close.</p></li>
+<li><p>A red border means monitors overlap. Move one aside.</p></li>
+</ul>
+<h3>5. Check, then unplug the streaming PC's keyboard and mouse</h3>
+<p>Once the gaming PC's mouse moves onto the streaming PC's screens, you can unplug the streaming PC's keyboard and mouse.</p>
+</section>
+<section><h2>Hotkeys</h2>
+<table><thead><tr><th>Feature</th><th>Default key</th><th>Description</th></tr></thead><tbody>
+<tr><td>Lock (가두기)</td><td><code>Scroll Lock</code></td><td>Keeps the cursor on the current PC. Press again to release. While locked the tray icon is orange and the quick-switch key is blocked</td></tr>
+<tr><td>Quick switch (빠른 전환)</td><td><code>Ctrl + Alt + `</code></td><td>Jumps to the other PC, at the spot you last left it, with a short ripple there. A ripple on the streaming PC briefly shows on the broadcast too</td></tr>
+</tbody></table>
+<ul>
+<li><p><strong>Changing a key</strong>: click a hotkey box in settings. It changes color and shows "새 키를 누르세요" (press a new key). Current hotkeys don't fire meanwhile, so just press the key you want (Esc: cancel).</p></li>
+<li><p><strong>Not using one</strong>: empty the box (<strong>[지우기]</strong> (clear) button, or click it and press Backspace). The feature is off and the key isn't intercepted.</p></li>
+<li><p>Locking on the gaming PC stops this program from watching the keyboard and mouse at all, so games aren't affected.</p></li>
+<li><p>Locking on the streaming PC keeps the cursor on its monitors. It then follows <strong>the streaming PC's Windows display arrangement</strong>, so you can move between streaming monitors even if a gaming monitor sits between them on your desk.</p></li>
+<li><p>While not connected, the program doesn't touch any key or mouse input, hotkeys included. Other programs using the same keys keep working.</p></li>
+</ul>
+</section>
+<section><h2>Moving files</h2>
+<ol>
+<li><p>Copy files or folders (Ctrl+C) on the sending PC. <strong>Copying alone sends nothing.</strong> It only tells the other PC what you copied.</p></li>
+<li><p>On the receiving PC, <strong>right-click</strong> an empty spot in the target folder (or the desktop) in Explorer.<br>On Windows 11, click <strong>Show more options</strong>, or use <strong>Shift+right-click</strong> from the start.</p></li>
+<li><p>Click <strong>Monitor Bridge: 상대 PC에서 복사한 파일 여기에 붙여넣기</strong> (paste files copied on the other PC here).</p></li>
+<li><p>A window by the cursor asks "이 폴더로 가져올까요?" (bring them into this folder?). Click <strong>[가져오기]</strong> (bring). The transfer starts then.</p></li>
+<li><p>A notice appears when it starts. <strong>Click the tray icon or the notice</strong> to open the progress window (progress, time left, cancel button). It never opens by itself, so it won't appear on the broadcast.</p></li>
+<li><p>When done, a "다 받았어요" (received) notice appears; click it to open the folder.</p></li>
+</ol>
+<ul>
+<li><p>Normal Ctrl+V pasting is untouched.</p></li>
+<li><p>Existing names are never overwritten; the copy is saved as <code>name (2)</code>.</p></li>
+<li><p><strong>Cancel</strong>: click <strong>[전송 취소]</strong> in the progress window or <strong>파일 전송 취소</strong> in the tray menu. Either PC stops both sides. Partly received files are deleted automatically; <strong>the sender's original files are never deleted or changed.</strong></p></li>
+<li><p><strong>Copy limit</strong>: 500MB by default, up to 100,000MB. You can send <strong>up to the smaller of the two PCs' limits.</strong> When they differ, settings show a red warning and the tray menu shows both limits.</p></li>
+</ul>
+</section>
+<section><h2>Settings</h2>
+<table><thead><tr><th>Item</th><th>Default</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>이 PC는 (This PC is)</td><td></td><td>게임컴 (gaming PC, has the keyboard and mouse) or 송출컴 (streaming PC)</td></tr>
+<tr><td>송출컴 IP (streaming PC IP)</td><td></td><td>Gaming PC only. The IP shown in the streaming PC's settings</td></tr>
+<tr><td>비밀번호 (password)</td><td></td><td>Same on both PCs. Used to encrypt the connection</td></tr>
+<tr><td>Lock key / quick-switch key</td><td><code>Scroll Lock</code> / <code>Ctrl+Alt+`</code></td><td>Gaming PC only. Leave empty to turn the feature off</td></tr>
+<tr><td>File copy limit</td><td>500MB</td><td>Up to 100,000MB. The smaller of the two PCs applies</td></tr>
+<tr><td>Auto start</td><td></td><td>Starts at Windows sign-in. Streaming PC as administrator</td></tr>
+<tr><td>모니터 배치 (monitor layout)</td><td></td><td>Gaming PC only. Match your desk</td></tr>
+</tbody></table>
+<p>The connection uses TCP port <code>24850</code>.</p>
+</section>
+<section><h2>Tray icon</h2>
+<table><thead><tr><th>Color / menu</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>Teal</td><td>Connected</td></tr>
+<tr><td>Grey</td><td>Not connected</td></tr>
+<tr><td>Orange</td><td>Lock on</td></tr>
+<tr><td><code>버전:</code> line at the top of the menu</td><td>This PC's Monitor Bridge version</td></tr>
+<tr><td>Limit line</td><td>Both PCs' file copy limits</td></tr>
+<tr><td>파일 전송 보기 / 파일 전송 취소</td><td>Open the progress window / stop the transfer</td></tr>
+</tbody></table>
+</section>
+<section><h2>Troubleshooting</h2>
+<table><thead><tr><th>Symptom</th><th>Cause</th><th>What to do</th></tr></thead><tbody>
+<tr><td>Won't connect (grey icon)</td><td>Program not running on the streaming PC, firewall, IP changed</td><td>Check it runs on the streaming PC → allow MonitorBridge under "Windows Defender Firewall → Allow an app" (or open TCP 24850) → recheck the streaming PC's IP (reserve it in your router)</td></tr>
+<tr><td>"비밀번호가 달라서 연결하지 못했어요" (password mismatch)</td><td>Passwords differ</td><td>Enter the same password on both PCs</td></tr>
+<tr><td>"두 PC의 Monitor Bridge 버전이 달라요" (versions differ)</td><td>Only one PC was updated</td><td>Keyboard and mouse keep working. Put both PCs on the same version</td></tr>
+<tr><td>Can't use the streaming PC's sign-in screen</td><td>The program starts after sign-in</td><td>Turn on auto sign-in on the streaming PC, or plug in a keyboard just to sign in</td></tr>
+<tr><td>Some programs like OBS ignore clicks</td><td>That program runs as administrator</td><td>Turn on <strong>관리자 권한으로 자동 실행</strong> on the streaming PC and restart</td></tr>
+<tr><td>Right-click item missing</td><td>Windows 11's new menu, or the program never ran</td><td><strong>Show more options</strong> or Shift+right-click; run Monitor Bridge once</td></tr>
+<tr><td>"Monitor Bridge가 실행 중이 아니에요" (not running)</td><td>Off on that PC</td><td>Start it on that PC first</td></tr>
+<tr><td>File copy fails</td><td>Over the limit, not enough free space</td><td>Check both limits. Files are first written to a hidden folder (<code>.MonitorBridge-받는중</code>) inside the target folder, so that drive needs the space</td></tr>
+<tr><td>Received files couldn't be moved into the folder</td><td>Antivirus etc. holds the file</td><td>Nothing is deleted; the files stay in the hidden folder named in the notice</td></tr>
+<tr><td>Streaming PC cursor is invisible</td><td>Normal while connected</td><td>It shows when the gaming PC's cursor moves over. After a crash, run Monitor Bridge again</td></tr>
+<tr><td>Keys act stuck after Ctrl+Alt+Del</td><td>Key releases can't be seen on that screen</td><td>Press and release Ctrl and Alt once</td></tr>
+</tbody></table>
+<p>If something goes wrong, check <code>%AppData%\MonitorBridge\log.txt</code>. Settings are saved in <code>config.json</code> in the same folder.</p>
+</section>
+<section><h2>Not supported</h2>
+<ul>
+<li><p>UAC prompts, the Ctrl+Alt+Del screen, the sign-in screen</p></li>
+<li><p>Gaming while the cursor is on the streaming PC (game on the gaming PC with the lock key on)</p></li>
+<li><p>Three or more PCs</p></li>
+<li><p>Connecting outside the same router (LAN)</p></li>
+</ul>
+</section>
+<section><h2>Updating</h2>
+<ol>
+<li><p>Exit Monitor Bridge from the tray on both PCs.</p></li>
+<li><p>Overwrite <code>MonitorBridge.exe</code> on both PCs with the new file, in the same place, so the firewall rule and auto start stay.</p></li>
+<li><p>Start it again, streaming PC first, then gaming PC.</p></li>
+</ol>
+<p>Different versions keep the keyboard and mouse connected, but some new features may not work, so keep both PCs on the same version.</p>
+</section>
+<section><h2>Notices</h2>
+<p>This program is released under the MIT license (see <code>LICENSE</code>). Notices for the .NET runtime bundled in the exe are in <code>THIRD-PARTY-NOTICES.txt</code>. Input Director, Mouse Without Borders and Barrier belong to their developers; this is an unofficial project unrelated to them.</p>
+</section>
+<section><h2>Contact</h2>
+<p>If you have a problem or a question, contact the author (Kimtan2).</p>
+<ul>
+<li><p>Discord: kimtan2</p></li>
+<li><p>Chzzk: 김탄2</p></li>
+</ul>
+</section>
+</body>
+</html>
