@@ -14,6 +14,7 @@ internal sealed class FileTransfer
     public const int ChunkSize = 60 * 1024; // fits one 64KB fragment with its header
     public static readonly string TempRoot = Path.Combine(Path.GetTempPath(), "MonitorBridge");
     const long MiB = 1L << 20;
+    const string DisconnectedNotice = "연결이 끊겨서 파일 전송이 멈췄어요. 다시 복사해 주세요.";
 
     readonly Func<long> _limitBytes;
     readonly string _peerName;
@@ -27,13 +28,7 @@ internal sealed class FileTransfer
     long _rxRemaining;
     readonly HashSet<string> _rxTops = new(StringComparer.OrdinalIgnoreCase);
 
-    // Progress of the latest transfer, guarded by _gate.
-    Guid _pId;
-    bool _pSending;
-    string _pName = "";
-    long _pTotal, _pDone, _pStart, _pEnd;
-    TransferState _pState;
-    bool _pActive;
+    readonly TransferTracker _track; // guarded by _gate
 
     /// <summary>The peer's copy limit in MB, once it has told us (null = unknown).</summary>
     public int? PeerLimitMB { get; set; }
@@ -44,48 +39,11 @@ internal sealed class FileTransfer
         _peerName = peerName;
         _notify = notify;
         _onReceived = onReceived;
+        _track = new TransferTracker(peerName);
         FileReceiver.CleanupExcept(TempRoot, null);
     }
 
-    public TransferProgress? Progress
-    {
-        get
-        {
-            lock (_gate)
-            {
-                if (!_pActive) return null;
-                long end = _pState == TransferState.Running ? Environment.TickCount64 : _pEnd;
-                return new TransferProgress(_pSending, _peerName, _pName, _pTotal, _pDone, end - _pStart, _pState);
-            }
-        }
-    }
-
-    /// <summary>Caller holds _gate. A transfer still running is replaced, so it shows as cancelled, never stuck.</summary>
-    void Begin(Guid id, bool sending, string name, long total)
-    {
-        _pId = id;
-        _pSending = sending;
-        _pName = name;
-        _pTotal = total;
-        _pDone = 0;
-        _pStart = Environment.TickCount64;
-        _pState = TransferState.Running;
-        _pActive = true;
-    }
-
-    /// <summary>Caller holds _gate. Only the transfer still shown and still running can finish.</summary>
-    bool Finish(Guid id, TransferState state)
-    {
-        if (!_pActive || _pId != id || _pState != TransferState.Running) return false;
-        _pState = state;
-        _pEnd = Environment.TickCount64;
-        return true;
-    }
-
-    void Advance(Guid id, long bytes)
-    {
-        lock (_gate) if (_pId == id && _pState == TransferState.Running) _pDone += bytes;
-    }
+    public TransferProgress? Progress { get { lock (_gate) return _track.Current; } }
 
     static string NameOf(IReadOnlyList<string> paths)
     {
@@ -122,8 +80,7 @@ internal sealed class FileTransfer
                 lock (_gate)
                 {
                     if (cts.IsCancellationRequested) return;
-                    if (_pActive) Finish(_pId, TransferState.Cancelled);
-                    Begin(id, true, name, total);
+                    _track.Begin(true, id, name, total);
                 }
                 _notify($"{_peerName}으로 파일을 보내기 시작했어요: {name} ({TransferProgress.Size(total)})");
                 await conn.SendBulkAsync(new FileOfferStart(id, total, entries.Count), cts.Token);
@@ -139,28 +96,30 @@ internal sealed class FileTransfer
                         int n = await fs.ReadAsync(buf.AsMemory(0, (int)Math.Min(buf.Length, left)), cts.Token);
                         if (n == 0) throw new IOException($"{e.FullPath} 파일이 복사 도중 바뀌었어요");
                         await conn.SendBulkAsync(new FileChunk(id, buf[..n]), cts.Token);
-                        Advance(id, n);
+                        lock (_gate) _track.Advance(true, id, n);
                         left -= n;
                     }
                 }
                 await conn.SendBulkAsync(new FileOfferEnd(id), cts.Token);
                 bool done;
-                lock (_gate) done = Finish(id, TransferState.Done);
+                lock (_gate) done = _track.Finish(true, id, TransferState.Done);
                 if (done) _notify($"다 보냈어요: {name}");
             }
-            catch (OperationCanceledException) { lock (_gate) Finish(id, TransferState.Cancelled); }
+            catch (OperationCanceledException) { lock (_gate) _track.Finish(true, id, TransferState.Cancelled); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Log.Error(ex);
-                lock (_gate) Finish(id, TransferState.Failed);
+                lock (_gate) _track.Finish(true, id, TransferState.Failed);
                 try { conn.Send(new FileCancel(id)); } catch (Exception e2) { Log.Error(e2); }
                 _notify("파일을 읽지 못해서 보내지 않았어요: " + ex.Message);
             }
             catch (Exception ex)
             {
-                // Typically the connection closed mid-transfer.
+                // Typically the connection closed mid-transfer; whichever path ends it first tells the person.
                 Log.Error(ex);
-                lock (_gate) Finish(id, TransferState.Failed);
+                bool failed;
+                lock (_gate) failed = _track.Finish(true, id, TransferState.Failed);
+                if (failed) _notify(DisconnectedNotice);
             }
         });
     }
@@ -175,9 +134,9 @@ internal sealed class FileTransfer
             _sending = null;
             _rx?.Cancel();
             _rx = null;
-            failed = _pActive && Finish(_pId, TransferState.Failed);
+            failed = _track.FailAll();
         }
-        if (failed) _notify("연결이 끊겨서 파일 전송이 멈췄어요. 다시 복사해 주세요.");
+        if (failed) _notify(DisconnectedNotice);
     }
 
     /// <summary>Called on the network thread for every file message from the peer.</summary>
@@ -190,9 +149,9 @@ internal sealed class FileTransfer
                 switch (m)
                 {
                     case FileOfferStart s:
+                        if (_rx is not null) _track.Finish(false, _rxId, TransferState.Cancelled);
                         _rx?.Cancel();
                         _rx = null;
-                        if (_pActive && !_pSending) Finish(_pId, TransferState.Cancelled);
                         FileReceiver.CleanupExcept(TempRoot, null);
                         // The peer is a trust boundary: enforce our own limit too.
                         if (s.TotalBytes < 0 || s.TotalBytes > _limitBytes())
@@ -204,41 +163,41 @@ internal sealed class FileTransfer
                         _rxId = s.Id;
                         _rxRemaining = s.TotalBytes;
                         _rxTops.Clear();
-                        Begin(s.Id, false, "", s.TotalBytes);
+                        _track.Begin(false, s.Id, "", s.TotalBytes);
                         _notify($"{_peerName}에서 파일을 받기 시작했어요: {TransferProgress.Size(s.TotalBytes)}");
                         break;
                     case FileEntry e when _rx is not null && e.Id == _rxId:
                         _rx.Add(e);
                         var top = e.RelativePath.Split('\\', '/')[0];
-                        if (_rxTops.Add(top) && _pId == e.Id)
-                            _pName = _rxTops.Count == 1 ? top : $"{_rxTops.First()} 외 {_rxTops.Count - 1}개";
+                        if (_rxTops.Add(top))
+                            _track.SetName(false, e.Id, _rxTops.Count == 1 ? top : $"{_rxTops.First()} 외 {_rxTops.Count - 1}개");
                         break;
                     case FileChunk c when _rx is not null && c.Id == _rxId:
                         _rxRemaining -= c.Data.Length;
                         if (_rxRemaining < 0) throw new InvalidDataException("More data than announced");
                         _rx.Write(c.Data);
-                        if (_pId == c.Id) _pDone += c.Data.Length;
+                        _track.Advance(false, c.Id, c.Data.Length);
                         break;
                     case FileOfferEnd end when _rx is not null && end.Id == _rxId:
                         var tops = _rx.Complete();
                         _rx = null;
-                        Finish(end.Id, TransferState.Done);
+                        _track.Finish(false, end.Id, TransferState.Done);
                         _onReceived(tops);
                         _notify("다 받았어요. 붙여넣으세요(Ctrl+V).");
                         break;
                     case FileCancel cancel when _rx is not null && cancel.Id == _rxId:
                         _rx.Cancel();
                         _rx = null;
-                        Finish(cancel.Id, TransferState.Cancelled);
+                        _track.Finish(false, cancel.Id, TransferState.Cancelled);
                         break;
                 }
             }
             catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
             {
                 Log.Error(ex);
+                if (_rx is not null) _track.Finish(false, _rxId, TransferState.Failed);
                 _rx?.Cancel();
                 _rx = null;
-                if (_pActive && !_pSending) Finish(_pId, TransferState.Failed);
                 _notify("상대 PC에서 온 파일을 받지 못했어요: " + ex.Message);
             }
         }
