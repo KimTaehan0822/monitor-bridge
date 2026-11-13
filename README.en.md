@@ -84,6 +84,7 @@ Once the gaming PC's mouse moves onto the streaming PC's screens, you can unplug
 - **Not using one**: empty the box (**[지우기]** (clear) button, or click it and press Backspace). The feature is off and the key isn't intercepted.
 - Locking on the gaming PC stops this program from watching the keyboard and mouse at all, so games aren't affected.
 - Locking on the streaming PC keeps the cursor on its monitors. It then follows **the streaming PC's Windows display arrangement**, so you can move between streaming monitors even if a gaming monitor sits between them on your desk.
+- While you drag on the streaming PC (a mouse button held), the cursor also follows the streaming PC's Windows display arrangement, so you can drag a window straight between streaming monitors. Releasing the button goes back to the desk layout.
 - While not connected, the program doesn't touch any key or mouse input, hotkeys included. Other programs using the same keys keep working.
 
 ## Moving files

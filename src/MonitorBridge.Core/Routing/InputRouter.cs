@@ -42,6 +42,10 @@ public sealed class InputRouter
     public bool IsRemote => ActivePcId != _hostPcId;
     public bool RemoteLocked { get; private set; }
     VirtualLayout? _remoteOs;
+    // A button is held on the remote PC: move like the lock (its own Windows layout) so a window can be dragged
+    // between its monitors, but without showing as locked. Ends with the last button-up.
+    bool _dragOs;
+    bool InRemoteOs => RemoteLocked || _dragOs;
 
     public InputRouter(VirtualLayout layout, string hostPcId, VPoint startOs)
     {
@@ -136,7 +140,7 @@ public sealed class InputRouter
         int dx = x - _park.X, dy = y - _park.Y;
         if (dx == 0 && dy == 0) return RouterResult.Swallow;
         // Locked: Position is in the remote PC's own OS coordinates (see ToggleRemoteLock).
-        var layout = RemoteLocked ? _remoteOs! : _layout;
+        var layout = InRemoteOs ? _remoteOs! : _layout;
         var target = layout.Move(Position, dx, dy);
         var (tm, ox, oy) = layout.ToOs(target);
         if (tm.Info.PcId == _hostPcId) return LeaveRemote(target, notifyRemote: true);
@@ -171,6 +175,8 @@ public sealed class InputRouter
     {
         if (down) _heldButtons.Add(b);
         else if (!_heldButtons.Remove(b)) return IsRemote ? RouterResult.Swallow : RouterResult.Pass;
+        if (IsRemote && down && !InRemoteOs) { EnterRemoteOs(); _dragOs = true; }
+        else if (_dragOs && _heldButtons.Count == 0) LeaveRemoteOs();
         return IsRemote ? RouterResult.Forward(new MouseButton(b, down)) : RouterResult.Pass;
     }
 
@@ -212,27 +218,41 @@ public sealed class InputRouter
     {
         if (!IsRemote) return false;
         if (RemoteLocked) { EndRemoteLock(); return false; }
-        // While locked the cursor follows the remote PC's own Windows layout, where its monitors touch even when
-        // a host monitor sits between them on the desk. Placing each monitor at its OS position makes virtual = OS.
-        var ms = _layout.Monitors.Where(m => m.Info.PcId == ActivePcId).Select(m => m.Info).ToList();
-        _remoteOs = new VirtualLayout(ms, ms.Select(m => new Placement(m.Key, m.OsX, m.OsY)));
-        var (_, ox, oy) = _layout.ToOs(Position);
-        Position = new VPoint(ox, oy);
+        if (_dragOs) _dragOs = false; // already in the remote layout: the drag becomes a lock that outlives the button
+        else EnterRemoteOs();
         RemoteLocked = true;
         return true;
     }
 
-    void EndRemoteLock()
+    /// <summary>
+    /// Switches to the remote PC's own Windows layout, where its monitors touch even when a host monitor sits
+    /// between them on the desk. Placing each monitor at its OS position makes virtual = OS.
+    /// </summary>
+    void EnterRemoteOs()
     {
-        if (!RemoteLocked) return;
+        var ms = _layout.Monitors.Where(m => m.Info.PcId == ActivePcId).Select(m => m.Info).ToList();
+        _remoteOs = new VirtualLayout(ms, ms.Select(m => new Placement(m.Key, m.OsX, m.OsY)));
+        var (_, ox, oy) = _layout.ToOs(Position);
+        Position = new VPoint(ox, oy);
+    }
+
+    void LeaveRemoteOs()
+    {
         Position = _layout.FromOs(ActivePcId, Position.X, Position.Y) ?? Position;
         RemoteLocked = false;
+        _dragOs = false;
         _remoteOs = null;
+    }
+
+    /// <summary>Ends a lock or a drag in the remote layout (leaving, layout change, unlock).</summary>
+    void EndRemoteLock()
+    {
+        if (InRemoteOs) LeaveRemoteOs();
     }
 
     public RouterResult QuickSwitch()
     {
-        if (RemoteLocked) return RouterResult.Swallow;
+        if (InRemoteOs) return RouterResult.Swallow; // leaving mid-drag would drop the dragged window
         if (IsRemote) return LeaveRemote(LastOrCenter(_hostPcId), notifyRemote: true);
         var remote = _layout.Monitors.FirstOrDefault(m => m.Info.PcId != _hostPcId);
         if (remote is null) return RouterResult.Pass;

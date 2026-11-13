@@ -317,4 +317,85 @@ public class InputRouterTests
         Assert.Equal("game", r.ActivePcId);
         Assert.False(r.RemoteLocked);
     }
+
+    // ---- dragging on the stream PC follows its own Windows layout ----
+
+    [Fact]
+    public void RemoteDrag_CrossesToOtherStreamMonitor()
+    {
+        var (r, _) = CrossToA();
+        r.OnButton(MouseButtonKind.Left, true);
+        var res = r.OnMouseMove(1285, 720);            // push right while dragging: into C, not the game monitor
+        Assert.Equal(new CursorMove(1924, 320), Assert.Single(res.ToRemote));
+        Assert.Equal("stream", r.ActivePcId);
+        Assert.False(r.RemoteLocked);                  // no orange lock icon for a drag
+    }
+
+    [Fact]
+    public void RemoteDrag_Release_ReturnsToDeskLayout()
+    {
+        var (r, _) = CrossToA();
+        r.OnButton(MouseButtonKind.Left, true);
+        r.OnMouseMove(1285, 720);                      // on C at OS (1924,320)
+        r.OnButton(MouseButtonKind.Left, false);
+        Assert.Equal(new VPoint(4484, 320), r.Position);
+        r.OnMouseMove(1270, 720);                      // left from C's edge now reaches the game monitor again
+        Assert.Equal("game", r.ActivePcId);
+    }
+
+    [Fact]
+    public void NoButton_StillCrossesToGame()
+    {
+        var (r, _) = CrossToA();
+        r.OnMouseMove(1285, 720);
+        Assert.Equal("game", r.ActivePcId);
+    }
+
+    [Fact]
+    public void DragWhileLocked_ReleaseKeepsLock()
+    {
+        var (r, _) = CrossToA();
+        r.ToggleRemoteLock();
+        r.OnButton(MouseButtonKind.Left, true);
+        r.OnButton(MouseButtonKind.Left, false);
+        Assert.True(r.RemoteLocked);
+        Assert.Equal(new CursorMove(1924, 320), Assert.Single(r.OnMouseMove(1285, 720).ToRemote));
+    }
+
+    [Fact]
+    public void LockDuringDrag_StaysLockedAfterRelease()
+    {
+        var (r, _) = CrossToA();
+        r.OnButton(MouseButtonKind.Left, true);
+        Assert.True(r.ToggleRemoteLock());
+        r.OnButton(MouseButtonKind.Left, false);
+        Assert.True(r.RemoteLocked);
+        Assert.Equal(new CursorMove(1924, 320), Assert.Single(r.OnMouseMove(1285, 720).ToRemote));
+        Assert.False(r.ToggleRemoteLock());
+    }
+
+    [Fact]
+    public void Drag_BlocksQuickSwitch()
+    {
+        var (r, _) = CrossToA();
+        r.OnButton(MouseButtonKind.Left, true);
+        var res = r.QuickSwitch();
+        Assert.True(res.Block);
+        Assert.Empty(res.ToRemote);
+        Assert.Equal("stream", r.ActivePcId);
+    }
+
+    [Fact]
+    public void Drag_ClearedWhenCursorIsSentHome()
+    {
+        var (r, _) = CrossToA();
+        r.OnButton(MouseButtonKind.Left, true);
+        r.OnSessionInterrupted();
+        Assert.Equal("game", r.ActivePcId);
+        r.OnMouseMove(0, 500);
+        r.OnMouseMove(-1, 500);                        // back into A, no button held
+        Assert.Equal("stream", r.ActivePcId);
+        r.OnMouseMove(1285, 720);
+        Assert.Equal("game", r.ActivePcId);            // desk layout again: right of A is the game monitor
+    }
 }
