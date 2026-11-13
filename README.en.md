@@ -110,7 +110,7 @@ Once the gaming PC's mouse moves onto the streaming PC's screens, you can unplug
 - 1 Gigabit (1000Mbps) network: up to about 110MB/s. The router, the cables and both PCs' network cards must all support 1 Gigabit.
 - 100 Megabit (100Mbps) network: up to about 11MB/s. If any one of those three is 100 Megabit, the whole link runs at 100 Megabit.
 - Wi-Fi speed goes up and down.
-- A broadcast upload is usually about 1–2MB/s. The cable needs room left over so the stream doesn't drop.
+- Broadcast upload: at FHD 8000kbps, about 4GB per hour (rounded up for headroom), or about 1.1MB/s. The cable needs room left over so the stream doesn't drop.
 
 | Situation | Suggested value |
 | --- | --- |
