@@ -77,6 +77,45 @@ public sealed class FileReceiver
         try { Directory.Delete(_root, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
+    /// <summary>Hidden folder inside the save folder that holds files while they arrive.</summary>
+    public const string StagingFolderName = ".MonitorBridge-받는중";
+
+    /// <summary>A path in <paramref name="folder"/> for <paramref name="name"/> that is not taken: "a.mkv", then "a (2).mkv"…</summary>
+    public static string UniqueName(string folder, string name)
+    {
+        var path = Path.Combine(folder, name);
+        if (!File.Exists(path) && !Directory.Exists(path)) return path;
+        var stem = Path.GetFileNameWithoutExtension(name);
+        var ext = Path.GetExtension(name);
+        for (int i = 2; ; i++)
+        {
+            path = Path.Combine(folder, $"{stem} ({i}){ext}");
+            if (!File.Exists(path) && !Directory.Exists(path)) return path;
+        }
+    }
+
+    /// <summary>Moves finished items into the save folder without overwriting or merging anything there.</summary>
+    public static IReadOnlyList<string> MoveInto(IReadOnlyList<string> tops, string dest)
+    {
+        var moved = new List<string>();
+        foreach (var src in tops)
+        {
+            for (int attempt = 0; ; attempt++)
+            {
+                var target = UniqueName(dest, Path.GetFileName(src));
+                try
+                {
+                    if (Directory.Exists(src)) Directory.Move(src, target);
+                    else File.Move(src, target);
+                    moved.Add(target);
+                    break;
+                }
+                catch (IOException) when (attempt < 5) { } // the name was taken just now; try the next number
+            }
+        }
+        return moved;
+    }
+
     public static void CleanupExcept(string tempRoot, Guid? keep)
     {
         if (!Directory.Exists(tempRoot)) return;
