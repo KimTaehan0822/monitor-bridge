@@ -253,14 +253,37 @@ public class InputRouterTests
     }
 
     [Fact]
-    public void RemoteLock_KeepsCursorOnStream()
+    public void RemoteLock_FollowsStreamWindowsLayout_AcrossItsMonitors()
     {
-        var (r, _) = CrossToA();                       // A at virtual (1919,320), park (1280,720)
+        // Virtually the game monitor sits between A and C, but on the stream PC's own desktop A(0,0) and C(1920,0) touch.
+        var (r, _) = CrossToA();                       // A at OS (1919,320), park (1280,720)
         Assert.True(r.ToggleRemoteLock());
-        var res = r.OnMouseMove(1285, 720);            // push right, toward the game monitor
+        var res = r.OnMouseMove(1285, 720);            // push right: into C, not the game monitor
         Assert.Equal("stream", r.ActivePcId);
-        Assert.Equal(new CursorMove(1919, 320), Assert.Single(res.ToRemote));
-        Assert.Equal(new CursorMove(1909, 320), Assert.Single(r.OnMouseMove(1270, 720).ToRemote));
+        Assert.Equal(new CursorMove(1924, 320), Assert.Single(res.ToRemote));
+        Assert.Equal(new CursorMove(1914, 320), Assert.Single(r.OnMouseMove(1270, 720).ToRemote)); // and back into A
+    }
+
+    [Fact]
+    public void RemoteLock_ClampsAtStreamDesktopEdge()
+    {
+        var (r, _) = CrossToA();
+        r.ToggleRemoteLock();
+        r.OnMouseMove(1280 - 1919, 720);               // to A's left edge
+        Assert.Equal(new CursorMove(0, 320), Assert.Single(r.OnMouseMove(1270, 720).ToRemote));
+        Assert.Equal("stream", r.ActivePcId);
+    }
+
+    [Fact]
+    public void RemoteLock_Unlock_KeepsPositionOnVirtualLayout()
+    {
+        var (r, _) = CrossToA();
+        r.ToggleRemoteLock();
+        r.OnMouseMove(1285, 720);                      // now on C at OS (1924,320) = virtual (4484,320)
+        r.ToggleRemoteLock();
+        Assert.Equal(new VPoint(4484, 320), r.Position);
+        r.QuickSwitch();
+        Assert.Equal(new CursorEnter(1924, 320), Assert.Single(r.QuickSwitch().ToRemote));
     }
 
     [Fact]
