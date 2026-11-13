@@ -57,6 +57,7 @@ static class Program
             MessageBox.Show("Monitor Bridge가 실행 중이 아니에요. 먼저 Monitor Bridge를 실행해 주세요.", "Monitor Bridge");
             return 1;
         }
+        AllowSetForegroundWindow(-1); // we got the click; let the running instance bring its question to the front
         if (PasteChannel.TrySend(PasteChannel.DefaultDir, folder)) return 0;
         MessageBox.Show("Monitor Bridge가 응답하지 않아요. 잠시 뒤 다시 해 보거나, Monitor Bridge를 다시 실행해 주세요.", "Monitor Bridge");
         return 1;
@@ -132,4 +133,5 @@ static class Program
         File.WriteAllText(Path.Combine(Path.GetTempPath(), "MonitorBridge-selftest.txt"), log.ToString());
     }
     [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hwnd, int cmd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int processId);
 }

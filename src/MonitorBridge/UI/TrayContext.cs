@@ -25,6 +25,8 @@ internal sealed class TrayContext : ApplicationContext
     Core.Net.PeerConnection? _lastConn;
     long _finishedAt;
     string? _clickPath; // what clicking the current balloon opens
+    IDisposable? _pasteChannel;
+    string PeerName => _cfg.Role == Role.Host ? "송출컴" : "게임컴";
 
     public TrayContext(AppConfig cfg)
     {
@@ -39,15 +41,25 @@ internal sealed class TrayContext : ApplicationContext
         _icon.ContextMenuStrip.Opening += (_, _) => limit.Text = _clipboard?.PeerLimitMB is { } peer
             ? $"파일 복사 한도: 이 PC {_cfg.FileSizeLimitMB:N0}MB · 상대 PC {peer:N0}MB (최대 {SettingsForm.MaxFileLimitMB:N0}MB)"
             : $"파일 복사 한도: {_cfg.FileSizeLimitMB:N0}MB (최대 {SettingsForm.MaxFileLimitMB:N0}MB)";
+        var cancelItem = new ToolStripMenuItem("파일 전송 취소", null, (_, _) => CancelTransfer());
+        _icon.ContextMenuStrip.Opening += (_, _) => cancelItem.Enabled = _clipboard?.Progress?.State == Core.Files.TransferState.Running;
+        _icon.ContextMenuStrip.Items.Add("파일 전송 보기", null, (_, _) => ShowTransfer());
+        _icon.ContextMenuStrip.Items.Add(cancelItem);
+        _icon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
         _icon.ContextMenuStrip.Items.Add("설정", null, (_, _) => ShowSettings());
         _icon.ContextMenuStrip.Items.Add("종료", null, (_, _) => Exit());
         _icon.DoubleClick += (_, _) => ShowSettings();
+        // One click shows the transfer window, but only while there is a transfer to look at.
+        _icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left && VisibleProgress() is not null) ShowTransfer(); };
         _icon.BalloonTipClicked += (_, _) =>
         {
-            if (_clickPath is null) return;
+            if (_clickPath is null) { if (VisibleProgress() is not null) ShowTransfer(); return; }
             try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{_clickPath}\""); }
             catch (Exception e) { Log.Error(e); }
         };
+        try { ShellMenu.Register(Environment.ProcessPath!); }
+        catch (Exception e) { Log.Error(e); } // the right-click item is a convenience; never block startup
+        _pasteChannel = PasteChannel.Start(PasteChannel.DefaultDir, folder => OnUi(() => OnPaste(folder)));
         _icon.Visible = true;
         _tick.Tick += (_, _) => OnTick();
         _tick.Start();
@@ -60,7 +72,7 @@ internal sealed class TrayContext : ApplicationContext
         try
         {
             _clipboard = new ClipboardSync(() => (_host?.Connection ?? _receiver?.Connection), () => (long)_cfg.FileSizeLimitMB * 1024 * 1024,
-                _cfg.Role == Role.Host ? "송출컴" : "게임컴", Notify);
+                PeerName, Notify);
             _clipboard.Saved += (paths, dest) =>
             {
                 if (paths.Count == 0) return;
@@ -141,6 +153,28 @@ internal sealed class TrayContext : ApplicationContext
         return now - _finishedAt < 60_000 ? p : null;
     }
 
+    void ShowTransfer() =>
+        TransferWindow.ShowOrFocus(() => _clipboard?.Progress, () => _clipboard?.CancelAll() ?? false);
+
+    void CancelTransfer() => _clipboard?.CancelAll();
+
+    /// <summary>Right-click "붙여넣기" in Explorer landed here with the folder it was used on.</summary>
+    void OnPaste(string folder)
+    {
+        if (_clipboard?.Pending is not { } offer)
+        {
+            Notify("상대 PC에서 복사한 파일이 없어요. 상대 PC에서 파일을 먼저 복사(Ctrl+C)해 주세요.");
+            return;
+        }
+        if (!PasteConfirm.Ask(PeerName, offer, folder)) return;
+        switch (_clipboard.Request(folder))
+        {
+            case RequestResult.Busy: Notify("이미 파일을 주고받는 중이에요. 끝나거나 취소한 뒤에 다시 가져와 주세요."); break;
+            case RequestResult.TooBig: Notify("파일이 복사 한도보다 커서 가져올 수 없어요. 두 PC 설정의 파일 복사 한도를 확인해 주세요."); break;
+            case RequestResult.NothingOffered: Notify("상대 PC에서 복사한 파일이 없어요. 상대 PC에서 파일을 먼저 복사(Ctrl+C)해 주세요."); break;
+        }
+    }
+
     void Notify(string text) => OnUi(() => { _clickPath = null; _icon.ShowBalloonTip(5000, "Monitor Bridge", text, ToolTipIcon.Info); });
 
     void OnUi(Action a) => _ui.Post(_ => a(), null);
@@ -211,6 +245,7 @@ internal sealed class TrayContext : ApplicationContext
     void Exit()
     {
         _tick.Stop();
+        _pasteChannel?.Dispose();
         StopServices();
         CursorHider.Restore();
         _icon.Visible = false;
