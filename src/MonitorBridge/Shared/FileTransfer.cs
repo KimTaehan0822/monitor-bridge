@@ -175,7 +175,6 @@ internal sealed class FileTransfer
             _sending = null;
             _rx?.Cancel();
             _rx = null;
-            PeerLimitMB = null;
             failed = _pActive && Finish(_pId, TransferState.Failed);
         }
         if (failed) _notify("연결이 끊겨서 파일 전송이 멈췄어요. 다시 복사해 주세요.");
