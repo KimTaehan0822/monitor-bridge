@@ -33,6 +33,24 @@ public class SpeedPacerTests
     }
 
     [Fact]
+    public void ShortStall_DoesNotBurst()
+    {
+        var p = New();
+        p.DelayMs(MiB, 10);
+        _now += 500; // the receiver's disk paused for half a second; that must not be sent at full LAN speed later
+        Assert.InRange(p.DelayMs(MiB, 10), 99, 101);
+    }
+
+    [Fact]
+    public void TimerOversleep_IsMadeUp()
+    {
+        var p = New();
+        p.DelayMs(MiB, 10);
+        _now += 115; // Task.Delay woke one 15ms timer tick late; the next piece goes a little sooner
+        Assert.InRange(p.DelayMs(MiB, 10), 84, 86);
+    }
+
+    [Fact]
     public void RateChange_StartsFresh()
     {
         var p = New();

@@ -7,7 +7,7 @@ namespace MonitorBridge.Core.Files;
 public sealed class SpeedPacer
 {
     const long MiB = 1L << 20;
-    const long MaxLagMs = 1000;
+    const long MaxLagMs = 50; // ~3 timer ticks: covers Task.Delay oversleep, too short to build a burst
     readonly Func<long> _nowMs;
     long _startMs;
     long _sent;
