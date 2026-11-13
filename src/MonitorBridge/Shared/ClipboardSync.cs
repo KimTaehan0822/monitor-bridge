@@ -27,6 +27,8 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
 
     /// <summary>Files fetched from the peer were saved (final paths, folder). Raised on the UI thread.</summary>
     public event Action<IReadOnlyList<string>, string>? Saved;
+    /// <summary>The peer said which build it runs (network thread).</summary>
+    public event Action<string>? PeerBuild;
 
     /// <param name="peerName">"게임컴" or "송출컴": the other PC, as people call it in notices.</param>
     public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, string peerName, Action<string> notify)
@@ -113,6 +115,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
             case ClipboardImage i: _ui.Post(_ => SetImage(i.Png), null); break;
             case FileListOffer or FileRequest or FileOfferStart or FileEntry or FileChunk or FileOfferEnd or FileCancel: _fileQueue.Writer.TryWrite(m); break;
             case PeerSettings ps: _files.PeerLimitMB = ps.FileLimitMB; break;
+            case Hello h: PeerBuild?.Invoke(h.Build); break;
         }
     }
 
@@ -128,7 +131,11 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
     {
         var conn = _conn();
         if (conn is null || conn.IsClosed) return;
-        try { conn.Send(new PeerSettings((int)(_fileLimitBytes() >> 20))); }
+        try
+        {
+            conn.Send(new Hello(BuildInfo.Build));
+            conn.Send(new PeerSettings((int)(_fileLimitBytes() >> 20)));
+        }
         catch (Exception e) { Log.Error(e); }
         _files.Reannounce(); // the peer forgot our offer when the link dropped
     }

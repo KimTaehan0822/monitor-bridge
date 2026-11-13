@@ -27,6 +27,8 @@ internal sealed class TrayContext : ApplicationContext
     string? _clickPath; // what clicking the current balloon opens
     IDisposable? _pasteChannel;
     bool _asking; // one paste question at a time (several selected folders launch several requests)
+    string? _peerBuild;     // what the other PC runs, once it told us on this connection
+    bool _buildWarned;      // the mismatch notice is shown once per connection
     string PeerName => _cfg.Role == Role.Host ? "송출컴" : "게임컴";
 
     public TrayContext(AppConfig cfg)
@@ -36,6 +38,11 @@ internal sealed class TrayContext : ApplicationContext
         _icon.Text = "Monitor Bridge";
         _icon.ContextMenuStrip = new ContextMenuStrip();
         var limit = new ToolStripMenuItem { Enabled = false };
+        var version = new ToolStripMenuItem { Enabled = false };
+        _icon.ContextMenuStrip.Opening += (_, _) => version.Text = _peerBuild is null || _peerBuild == BuildInfo.Build
+            ? $"버전: {BuildInfo.Build}"
+            : $"버전: 이 PC {BuildInfo.Build} · 상대 PC {_peerBuild} (서로 달라요)";
+        _icon.ContextMenuStrip.Items.Add(version);
         _icon.ContextMenuStrip.Items.Add(limit);
         _icon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
         // Read on every open: the limit changes when settings are saved.
@@ -74,6 +81,7 @@ internal sealed class TrayContext : ApplicationContext
         {
             _clipboard = new ClipboardSync(() => (_host?.Connection ?? _receiver?.Connection), () => (long)_cfg.FileSizeLimitMB * 1024 * 1024,
                 PeerName, Notify);
+            _clipboard.PeerBuild += b => OnUi(() => OnPeerBuild(b));
             _clipboard.Saved += (paths, dest) =>
             {
                 if (paths.Count == 0) return;
@@ -138,6 +146,8 @@ internal sealed class TrayContext : ApplicationContext
         if (!ReferenceEquals(conn, _lastConn))
         {
             if (_lastConn is not null) _clipboard?.OnDisconnected();
+            _peerBuild = null;
+            _buildWarned = false;
             _lastConn = conn;
             if (conn is not null) _clipboard?.SendSettings();
         }
@@ -152,6 +162,15 @@ internal sealed class TrayContext : ApplicationContext
         long now = Environment.TickCount64;
         if (_finishedAt == 0) _finishedAt = now;
         return now - _finishedAt < 60_000 ? p : null;
+    }
+
+    /// <summary>Different builds keep working for mouse and keyboard (unknown messages are skipped); say so once.</summary>
+    void OnPeerBuild(string build)
+    {
+        _peerBuild = build;
+        if (build == BuildInfo.Build || _buildWarned) return;
+        _buildWarned = true;
+        Notify($"두 PC의 Monitor Bridge 버전이 달라요. 이 PC: {BuildInfo.Build}, 상대 PC: {build}. 키보드·마우스는 그대로 쓸 수 있지만 일부 기능이 동작하지 않을 수 있어요. 두 PC를 같은 버전으로 맞춰 주세요.");
     }
 
     void ShowTransfer() =>
