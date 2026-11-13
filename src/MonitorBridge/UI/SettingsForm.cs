@@ -24,6 +24,7 @@ internal sealed class SettingsForm : Form
     readonly Label _transfer = new() { AutoSize = true };
     readonly System.Windows.Forms.Timer _live = new() { Interval = 1000 };
     readonly Func<int?>? _peerLimitMB;
+    readonly Func<int?>? _peerSpeedMBps;
     readonly Func<TransferProgress?>? _progress;
     readonly Button _save = new() { Text = "저장", AutoSize = true };
     readonly LayoutCanvas? _canvas;
@@ -35,10 +36,11 @@ internal sealed class SettingsForm : Form
     public event Action<bool>? CapturingKeys;
 
     public SettingsForm(AppConfig cfg, VirtualLayout? layout, string hostPcId, bool remoteConnected,
-        Func<int?>? peerLimitMB = null, Func<TransferProgress?>? progress = null)
+        Func<int?>? peerLimitMB = null, Func<TransferProgress?>? progress = null, Func<int?>? peerSpeedMBps = null)
     {
         _source = cfg;
         _peerLimitMB = peerLimitMB;
+        _peerSpeedMBps = peerSpeedMBps;
         _progress = progress;
         Text = "Monitor Bridge 설정";
         Font = new Font("맑은 고딕", 9f);

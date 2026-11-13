@@ -38,17 +38,26 @@ internal sealed class TrayContext : ApplicationContext
         _icon.Text = "Monitor Bridge";
         _icon.ContextMenuStrip = new ContextMenuStrip();
         var limit = new ToolStripMenuItem { Enabled = false };
+        var speed = new ToolStripMenuItem { Enabled = false };
         var version = new ToolStripMenuItem { Enabled = false };
         _icon.ContextMenuStrip.Opening += (_, _) => version.Text = _peerBuild is null || _peerBuild == BuildInfo.Build
             ? $"버전: {BuildInfo.Build}"
             : $"버전: 이 PC {BuildInfo.Build} · 상대 PC {_peerBuild} (서로 달라요)";
         _icon.ContextMenuStrip.Items.Add(version);
         _icon.ContextMenuStrip.Items.Add(limit);
+        _icon.ContextMenuStrip.Items.Add(speed);
         _icon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
         // Read on every open: the limit changes when settings are saved.
         _icon.ContextMenuStrip.Opening += (_, _) => limit.Text = _clipboard?.PeerLimitMB is { } peer
             ? $"파일 복사 한도: 이 PC {_cfg.FileSizeLimitMB:N0}MB · 상대 PC {peer:N0}MB (최대 {SettingsForm.MaxFileLimitMB:N0}MB)"
             : $"파일 복사 한도: {_cfg.FileSizeLimitMB:N0}MB (최대 {SettingsForm.MaxFileLimitMB:N0}MB)";
+        _icon.ContextMenuStrip.Opening += (_, _) =>
+        {
+            int own = _cfg.FileSpeedLimitMBps;
+            speed.Text = _clipboard?.PeerSpeedMBps is { } peer && peer != own
+                ? $"파일 전송 속도: 이 PC {Core.Files.TransferProgress.SpeedText(own)} · 상대 PC {Core.Files.TransferProgress.SpeedText(peer)} → {Core.Files.TransferProgress.SpeedText(Core.Files.TransferProgress.EffectiveSpeed(own, peer))}"
+                : $"파일 전송 속도: {Core.Files.TransferProgress.SpeedText(own)}";
+        };
         var cancelItem = new ToolStripMenuItem("파일 전송 취소", null, (_, _) => CancelTransfer());
         _icon.ContextMenuStrip.Opening += (_, _) => cancelItem.Enabled = _clipboard?.Progress?.State == Core.Files.TransferState.Running;
         _icon.ContextMenuStrip.Items.Add("파일 전송 보기", null, (_, _) => ShowTransfer());
@@ -80,7 +89,7 @@ internal sealed class TrayContext : ApplicationContext
         try
         {
             _clipboard = new ClipboardSync(() => (_host?.Connection ?? _receiver?.Connection), () => (long)_cfg.FileSizeLimitMB * 1024 * 1024,
-                PeerName, Notify);
+                () => _cfg.FileSpeedLimitMBps, PeerName, Notify);
             _clipboard.PeerBuild += b => OnUi(() => OnPeerBuild(b));
             _clipboard.Saved += (paths, dest) =>
             {
@@ -219,7 +228,7 @@ internal sealed class TrayContext : ApplicationContext
             ? new Core.Layout.VirtualLayout(MonitorEnumerator.GetMonitors(), _cfg.Placements)
             : null);
         _settings = new SettingsForm(_cfg, layout, MonitorEnumerator.PcId, _host?.Connection is not null,
-            () => _clipboard?.PeerLimitMB, VisibleProgress);
+            () => _clipboard?.PeerLimitMB, VisibleProgress, () => _clipboard?.PeerSpeedMBps);
         _settings.CapturingKeys += on => _host?.SuspendHotkeys(on);
         if (_cfg.Role == Role.Receiver || string.IsNullOrEmpty(_cfg.Password)) _settings.ShowLocalAddresses($"이 PC의 IP: {string.Join(", ", LocalAddresses())}  (게임컴 설정의 '송출컴 IP'에 넣으세요)");
         try
@@ -236,6 +245,7 @@ internal sealed class TrayContext : ApplicationContext
                 // Nothing the link depends on changed: apply in place and keep the connection.
                 // The services hold this same _cfg object, so update it rather than replacing it.
                 _cfg.FileSizeLimitMB = next.FileSizeLimitMB;
+                _cfg.FileSpeedLimitMBps = next.FileSpeedLimitMBps;
                 _cfg.AutoStart = next.AutoStart;
                 if (_host is not null) _host.ApplyLayout(next.Placements);
                 else _cfg.Placements = next.Placements;

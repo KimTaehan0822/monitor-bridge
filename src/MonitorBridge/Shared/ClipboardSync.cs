@@ -24,6 +24,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
     readonly Channel<Message> _fileQueue = Channel.CreateUnbounded<Message>(new UnboundedChannelOptions { SingleReader = true });
 
     readonly Func<long> _fileLimitBytes;
+    readonly Func<int> _speedMBps;
 
     /// <summary>Files fetched from the peer were saved (final paths, folder). Raised on the UI thread.</summary>
     public event Action<IReadOnlyList<string>, string>? Saved;
@@ -31,10 +32,11 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
     public event Action<string>? PeerBuild;
 
     /// <param name="peerName">"게임컴" or "송출컴": the other PC, as people call it in notices.</param>
-    public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, string peerName, Action<string> notify)
+    public ClipboardSync(Func<PeerConnection?> conn, Func<long> fileLimitBytes, Func<int> speedMBps, string peerName, Action<string> notify)
     {
         _conn = conn;
         _fileLimitBytes = fileLimitBytes;
+        _speedMBps = speedMBps;
         _ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Create on the UI thread");
         _files = new FileTransfer(fileLimitBytes, peerName, notify,
             (paths, dest) => _ui.Post(_ => Saved?.Invoke(paths, dest), null),
@@ -44,7 +46,8 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
                 if (c is null || c.IsClosed) return;
                 try { c.Send(m); } catch (Exception e) { Log.Error(e); }
             },
-            (m, ct) => _conn() is { IsClosed: false } c ? c.SendBulkAsync(m, ct) : throw new IOException("연결이 끊겼어요"));
+            (m, ct) => _conn() is { IsClosed: false } c ? c.SendBulkAsync(m, ct) : throw new IOException("연결이 끊겼어요"),
+            speedMBps: speedMBps);
         CreateHandle(new CreateParams { Parent = new IntPtr(-3) }); // HWND_MESSAGE: invisible message-only window
         Win32.AddClipboardFormatListener(Handle);
         _ = Task.Run(async () =>
@@ -115,18 +118,20 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
             case ClipboardImage i: _ui.Post(_ => SetImage(i.Png), null); break;
             case FileListOffer or FileRequest or FileOfferStart or FileEntry or FileChunk or FileOfferEnd or FileCancel: _fileQueue.Writer.TryWrite(m); break;
             case PeerSettings ps: _files.PeerLimitMB = ps.FileLimitMB; break;
+            case PeerSpeed sp: _files.PeerSpeedMBps = sp.MBps; break;
             case Hello h: PeerBuild?.Invoke(h.Build); break;
         }
     }
 
     public Core.Files.TransferProgress? Progress => _files.Progress;
     public int? PeerLimitMB => _files.PeerLimitMB;
+    public int? PeerSpeedMBps => _files.PeerSpeedMBps;
     public void OnDisconnected() => _files.OnDisconnected();
     public Core.Protocol.FileListOffer? Pending => _files.Pending;
     public RequestResult Request(string folder, Guid offerId) => _files.Request(folder, offerId);
     public bool CancelAll() => _files.CancelAll();
 
-    /// <summary>Tells the peer our copy limit; call on connect and whenever it changes.</summary>
+    /// <summary>Tells the peer our copy limit and speed limit; call on connect and whenever it changes.</summary>
     public void SendSettings()
     {
         var conn = _conn();
@@ -135,6 +140,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
         {
             conn.Send(new Hello(BuildInfo.Build));
             conn.Send(new PeerSettings((int)(_fileLimitBytes() >> 20)));
+            conn.Send(new PeerSpeed(_speedMBps()));
         }
         catch (Exception e) { Log.Error(e); }
         _files.Reannounce(); // the peer forgot our offer when the link dropped
