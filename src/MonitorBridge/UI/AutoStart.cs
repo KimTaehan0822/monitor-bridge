@@ -14,7 +14,8 @@ internal static class AutoStart
 
     public static bool IsEnabled() => Run("schtasks", $"/Query /TN {TaskName}") == 0;
 
-    static bool IsAdmin() => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+    /// <summary>Running elevated. Without it Windows blocks our injected input into elevated windows (installers, admin OBS).</summary>
+    public static bool IsAdmin() => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
 
     /// <summary>Applies the setting, asking for elevation (UAC) when needed. Returns false if it could not be applied.</summary>
     public static bool Set(bool enabled)

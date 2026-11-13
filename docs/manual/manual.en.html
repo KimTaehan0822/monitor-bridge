@@ -7,7 +7,7 @@
 </head>
 <body>
 <h1>Monitor Bridge Manual (English)</h1>
-<p><time datetime="2026-11-14">2026-11-14 (v0.1.0)</time></p>
+<p><time datetime="2026-11-14">2026-11-14 (v0.2.0)</time></p>
 <p>A Windows program that lets one keyboard and mouse on your gaming PC also control your streaming PC. It is similar to Input Director, but you can <strong>arrange every monitor freely</strong>.</p>
 <p>Example: if your desk has <code>Stream 1 | Game | Stream 2</code>, the cursor crosses in that order. It feels like one PC with three monitors.</p>
 <ul>
@@ -132,7 +132,7 @@
 <tr><td>"비밀번호가 달라서 연결하지 못했어요" (password mismatch)</td><td>Passwords differ</td><td>Enter the same password on both PCs</td></tr>
 <tr><td>"두 PC의 Monitor Bridge 버전이 달라요" (versions differ)</td><td>Only one PC was updated</td><td>Keyboard and mouse keep working. Put both PCs on the same version</td></tr>
 <tr><td>Can't use the streaming PC's sign-in screen</td><td>The program starts after sign-in</td><td>Turn on auto sign-in on the streaming PC, or plug in a keyboard just to sign in</td></tr>
-<tr><td>Some programs like OBS ignore clicks</td><td>That program runs as administrator</td><td>Turn on <strong>관리자 권한으로 자동 실행</strong> on the streaming PC and restart</td></tr>
+<tr><td>Installer/uninstaller windows or programs like OBS ignore input</td><td>That program runs as administrator but Monitor Bridge on the streaming PC does not (for example, started by double-clicking the exe). A notice appears at start and settings show a red note</td><td>Turn on <strong>관리자 권한으로 자동 실행</strong> on the streaming PC and restart the PC, or right-click the exe → <strong>Run as administrator</strong></td></tr>
 <tr><td>Right-click item missing</td><td>Windows 11's new menu, or the program never ran</td><td><strong>Show more options</strong> or Shift+right-click; run Monitor Bridge once</td></tr>
 <tr><td>"Monitor Bridge가 실행 중이 아니에요" (not running)</td><td>Off on that PC</td><td>Start it on that PC first</td></tr>
 <tr><td>File copy fails</td><td>Over the limit, not enough free space</td><td>Check both limits. Files are first written to a hidden folder (<code>.MonitorBridge-받는중</code>) inside the target folder, so that drive needs the space</td></tr>

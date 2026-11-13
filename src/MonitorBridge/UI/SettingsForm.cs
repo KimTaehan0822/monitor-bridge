@@ -42,6 +42,12 @@ internal sealed class SettingsForm : Form
     readonly Label _error = new() { AutoSize = true, ForeColor = Warn };
     readonly Label _limitWarn = new() { AutoSize = true, ForeColor = Warn, Visible = false };
     readonly Label _speedWarn = new() { AutoSize = true, ForeColor = Warn, Visible = false };
+    readonly Label _adminWarn = new()
+    {
+        AutoSize = true, ForeColor = Warn, Visible = false,
+        Text = "지금 관리자 권한 없이 실행 중이라 설치·제거 창, 관리자로 켠 OBS 같은 프로그램은 조작할 수 없어요.\n"
+            + "위 자동 실행을 켜고 PC를 다시 시작하거나, exe를 우클릭 → '관리자 권한으로 실행'으로 켜 주세요.",
+    };
     readonly ProgressBar _bar = new() { Width = 300, Height = 8, Style = ProgressBarStyle.Continuous, Maximum = 100 };
     readonly Label _transfer = new() { AutoSize = true };
     readonly System.Windows.Forms.Timer _live = new() { Interval = 1000 };
@@ -134,6 +140,7 @@ internal sealed class SettingsForm : Form
         Row("", _speedGuide);
         _guideLink.LinkClicked += (_, _) => ToggleSpeedGuide();
         Row("", _autoStart);
+        Row("", _adminWarn);
         var transferBox = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
         _bar.Margin = new Padding(0, 4, 0, 4);
         _transfer.Margin = Padding.Empty;
@@ -237,6 +244,8 @@ internal sealed class SettingsForm : Form
     void ApplyRole()
     {
         foreach (var c in _hostOnly) c.Visible = _host.Checked;
+        // Only the stream PC receives input; the game PC works the same either way.
+        _adminWarn.Visible = _receiver.Checked && !AutoStart.IsAdmin();
     }
 
     string? Problem()

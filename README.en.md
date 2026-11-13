@@ -155,7 +155,7 @@ The connection uses TCP port `24850`.
 | "비밀번호가 달라서 연결하지 못했어요" (password mismatch) | Passwords differ | Enter the same password on both PCs |
 | "두 PC의 Monitor Bridge 버전이 달라요" (versions differ) | Only one PC was updated | Keyboard and mouse keep working. Put both PCs on the same version |
 | Can't use the streaming PC's sign-in screen | The program starts after sign-in | Turn on auto sign-in on the streaming PC, or plug in a keyboard just to sign in |
-| Some programs like OBS ignore clicks | That program runs as administrator | Turn on **관리자 권한으로 자동 실행** on the streaming PC and restart |
+| Installer/uninstaller windows or programs like OBS ignore input | That program runs as administrator but Monitor Bridge on the streaming PC does not (for example, started by double-clicking the exe). A notice appears at start and settings show a red note | Turn on **관리자 권한으로 자동 실행** on the streaming PC and restart the PC, or right-click the exe → **Run as administrator** |
 | Right-click item missing | Windows 11's new menu, or the program never ran | **Show more options** or Shift+right-click; run Monitor Bridge once |
 | "Monitor Bridge가 실행 중이 아니에요" (not running) | Off on that PC | Start it on that PC first |
 | File copy fails | Over the limit, not enough free space | Check both limits. Files are first written to a hidden folder (`.MonitorBridge-받는중`) inside the target folder, so that drive needs the space |

@@ -84,6 +84,9 @@ internal sealed class TrayContext : ApplicationContext
         else StartServices();
     }
 
+    public const string NotAdminNotice = "관리자 권한 없이 실행 중이라 관리자 권한 프로그램(설치·제거 창, 관리자로 켠 OBS 등)은 조작할 수 없어요. "
+        + "설정에서 '관리자 권한으로 자동 실행'을 켜고 PC를 다시 시작하거나, exe를 우클릭 → '관리자 권한으로 실행'으로 켜 주세요.";
+
     void StartServices()
     {
         try
@@ -115,6 +118,11 @@ internal sealed class TrayContext : ApplicationContext
                 _receiver.MessageReceived += m => { if (m is Core.Protocol.Highlight) OnUi(() => { Native.Win32.GetCursorPos(out var p); RippleWindow.Play(p.X, p.Y); }); };
                 _receiver.Start();
                 SetStatus(HostStatus.Disconnected);
+                if (!AutoStart.IsAdmin())
+                {
+                    Log.Info("receiver is not elevated: elevated windows will ignore input");
+                    Notify(NotAdminNotice);
+                }
             }
         }
         catch (SocketException e)
