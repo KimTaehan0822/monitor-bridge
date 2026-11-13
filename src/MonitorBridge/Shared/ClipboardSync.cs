@@ -47,7 +47,7 @@ internal sealed class ClipboardSync : NativeWindow, IDisposable
                 try { c.Send(m); } catch (Exception e) { Log.Error(e); }
             },
             (m, ct) => _conn() is { IsClosed: false } c ? c.SendBulkAsync(m, ct) : throw new IOException("연결이 끊겼어요"),
-            speedMBps: speedMBps);
+            speedMBps: speedMBps, isConnected: () => _conn() is { IsClosed: false });
         CreateHandle(new CreateParams { Parent = new IntPtr(-3) }); // HWND_MESSAGE: invisible message-only window
         Win32.AddClipboardFormatListener(Handle);
         _ = Task.Run(async () =>

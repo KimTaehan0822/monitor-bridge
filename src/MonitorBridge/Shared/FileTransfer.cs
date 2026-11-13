@@ -4,7 +4,7 @@ using Message = MonitorBridge.Core.Protocol.Message;
 
 namespace MonitorBridge.Shared;
 
-internal enum RequestResult { Started, NothingOffered, Changed, Busy, TooBig }
+internal enum RequestResult { Started, NothingOffered, Changed, Busy, TooBig, NotConnected }
 
 /// <summary>
 /// Copy announces, paste fetches: copying files only tells the peer what is on offer; the files travel when the
@@ -23,6 +23,7 @@ internal sealed class FileTransfer
     readonly Action<IReadOnlyList<string>, string> _onSaved;
     readonly Action<Message> _reply;
     readonly Func<Message, CancellationToken, ValueTask> _sendBulk;
+    readonly Func<bool> _isConnected;
     readonly Func<int>? _speedMBps; // this PC's send limit, read per chunk so a saved change applies at once
     readonly object _gate = new();
     readonly TransferTracker _track; // guarded by _gate
@@ -59,8 +60,9 @@ internal sealed class FileTransfer
     public FileTransfer(Func<long> limitBytes, string peerName, Action<string> notify,
         Action<IReadOnlyList<string>, string> onSaved, Action<Message> reply,
         Func<Message, CancellationToken, ValueTask> sendBulk, string? legacyTempRoot = null, string? stagingRecord = null,
-        Func<int>? speedMBps = null)
+        Func<int>? speedMBps = null, Func<bool>? isConnected = null)
     {
+        _isConnected = isConnected ?? (() => true);
         _speedMBps = speedMBps;
         _stagingRecord = stagingRecord ?? Path.Combine(Path.GetDirectoryName(Core.Config.AppConfig.DefaultPath)!, "receiving.txt");
         CleanRecordedStaging();
@@ -275,6 +277,8 @@ internal sealed class FileTransfer
         {
             if (_pending is null) return RequestResult.NothingOffered;
             if (_pending.Id != offerId) return RequestResult.Changed;
+            // A request into a dead link is never answered, so the wait would never end ("already transferring").
+            if (!_isConnected()) return RequestResult.NotConnected;
             if (_rx is not null || _requestedId != Guid.Empty) return RequestResult.Busy;
             long? peer = PeerLimitMB is { } p ? p * MiB : null;
             if (_pending.TotalBytes > TransferProgress.EffectiveLimit(_limitBytes(), peer)) return RequestResult.TooBig;

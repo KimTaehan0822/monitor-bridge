@@ -24,10 +24,26 @@ public class FileTransferTests : IDisposable
         try { Directory.Delete(_dir, true); } catch (IOException) { }
     }
 
+    bool _connected = true;
+
     FileTransfer New(long limit = 1L << 30, int? speedMBps = null) =>
         new(() => limit, "게임컴", n => { lock (_lock) _notices.Add(n); }, (paths, _) => _saved = paths,
             m => { lock (_lock) _replies.Add(m); }, SendBulk, legacyTempRoot: Path.Combine(_dir, "no-legacy"),
-            stagingRecord: Path.Combine(_dir, "staging.txt"), speedMBps: speedMBps is { } v ? () => v : null);
+            stagingRecord: Path.Combine(_dir, "staging.txt"), speedMBps: speedMBps is { } v ? () => v : null,
+            isConnected: () => _connected);
+
+    [Fact]
+    public void Request_WhileDisconnected_IsRefusedAndLeavesNothingWaiting()
+    {
+        var t = New();
+        var id = Guid.NewGuid();
+        t.OnMessage(new FileListOffer(id, 1, 10, "a.txt")); // offered before the link dropped
+        _connected = false;
+        Assert.Equal(RequestResult.NotConnected, t.Request(Folder("dest"), id));
+        lock (_lock) Assert.Empty(_replies.OfType<FileRequest>()); // nothing sent into a dead link
+        _connected = true; // link back: a new paste must work, not say "already transferring"
+        Assert.Equal(RequestResult.Started, t.Request(Folder("dest"), id));
+    }
 
     async ValueTask SendBulk(Message m, CancellationToken ct)
     {

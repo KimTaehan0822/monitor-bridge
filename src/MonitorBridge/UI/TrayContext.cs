@@ -211,6 +211,7 @@ internal sealed class TrayContext : ApplicationContext
         switch (_clipboard.Request(folder, offer.Id))
         {
             case RequestResult.Changed: Notify("그 사이에 상대 PC에서 다른 파일을 복사했어요. 다시 우클릭해서 가져와 주세요."); break;
+            case RequestResult.NotConnected: Notify($"{PeerName}과 연결되어 있지 않아서 가져올 수 없어요. 연결된 뒤에 다시 가져와 주세요."); break;
             case RequestResult.Busy: Notify("이미 파일을 주고받는 중이에요. 끝나거나 취소한 뒤에 다시 가져와 주세요."); break;
             case RequestResult.TooBig: Notify("파일이 복사 한도보다 커서 가져올 수 없어요. 두 PC 설정의 파일 복사 한도를 확인해 주세요."); break;
             case RequestResult.NothingOffered: Notify("상대 PC에서 복사한 파일이 없어요. 상대 PC에서 파일을 먼저 복사(Ctrl+C)해 주세요."); break;
