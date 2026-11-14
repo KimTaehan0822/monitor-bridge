@@ -48,6 +48,8 @@ internal sealed class SettingsForm : Form
         Text = "지금 관리자 권한 없이 실행 중이라 설치·제거 창, 관리자로 켠 OBS 같은 프로그램은 조작할 수 없어요.\n"
             + "위 자동 실행을 켜고 PC를 다시 시작하거나, exe를 우클릭 → '관리자 권한으로 실행'으로 켜 주세요.",
     };
+    readonly LinkLabel _update = new() { AutoSize = true, Visible = false, Margin = new Padding(0, 10, 0, 0) };
+    readonly CancellationTokenSource _closing = new();
     readonly ProgressBar _bar = new() { Width = 300, Height = 8, Style = ProgressBarStyle.Continuous, Maximum = 100 };
     readonly Label _transfer = new() { AutoSize = true };
     readonly System.Windows.Forms.Timer _live = new() { Interval = 1000 };
@@ -175,6 +177,7 @@ internal sealed class SettingsForm : Form
         }
         _hostOnly = extra.ToArray();
         stack.Controls.Add(_error);
+        stack.Controls.Add(_update);
 
         var cancel = new Button { Text = "취소", AutoSize = true, DialogResult = DialogResult.Cancel };
         var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Margin = new Padding(0, 12, 0, 0) };
@@ -201,6 +204,31 @@ internal sealed class SettingsForm : Form
         ApplyRole();
         UpdateState();
         UpdateLive();
+        Shown += async (_, _) => await ShowUpdateAsync();
+        FormClosed += (_, _) => _closing.Cancel();
+    }
+
+    /// <summary>New release on GitHub: a link above the buttons, and a popup once per release
+    /// (only here, because the game PC screen is on stream).</summary>
+    async Task ShowUpdateAsync()
+    {
+        var release = await Shared.UpdateCheck.LatestAsync(_closing.Token);
+        if (IsDisposed || release is not { } r) return;
+        var current = typeof(SettingsForm).Assembly.GetName().Version?.ToString(3) ?? "";
+        if (!Core.Updates.ReleaseVersion.IsNewer(r.Tag, current)) return;
+
+        void Open() => System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(r.Url) { UseShellExecute = true });
+        _update.Text = $"새 버전 {r.Tag}이 나왔어요 — 릴리즈 페이지 열기";
+        _update.LinkClicked += (_, _) => Open();
+        _update.Visible = true;
+
+        var seenPath = Path.Combine(Path.GetDirectoryName(AppConfig.DefaultPath)!, "update-seen.txt");
+        string? seen = null;
+        try { seen = File.Exists(seenPath) ? File.ReadAllText(seenPath).Trim() : null; } catch { }
+        if (seen == r.Tag) return;
+        try { File.WriteAllText(seenPath, r.Tag); } catch { }
+        if (MessageBox.Show(this, $"새 버전 {r.Tag}이 나왔어요.\n릴리즈 페이지를 열까요?", "Monitor Bridge", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+            Open();
     }
 
     /// <summary>Limit mismatch and transfer progress; both change while the window is open.</summary>
@@ -237,7 +265,7 @@ internal sealed class SettingsForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _live.Dispose();
+        if (disposing) { _live.Dispose(); _closing.Dispose(); }
         base.Dispose(disposing);
     }
 
