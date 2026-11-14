@@ -188,7 +188,17 @@ internal sealed class HostService : IDisposable
                 bool lockHit = !_keysSuspended && _lock?.OnKey(k.Vk, k.Down) == true;
                 bool quickHit = !_keysSuspended && _quick?.OnKey(k.Vk, k.Down) == true;
                 // Game PC: unhook entirely (games). Stream PC: keep routing but stop at its monitor edges.
-                if (lockHit) { if (_router.IsRemote) { _router.ToggleRemoteLock(); Execute(RouterResult.Swallow); } else Lock(); return true; }
+                if (lockHit)
+                {
+                    if (!_router.IsRemote) Lock();
+                    else
+                    {
+                        // Unlocking on the stream PC ends the whole lock: coming back no longer relocks the game PC.
+                        if (!_router.ToggleRemoteLock()) _relockOnReturn = false;
+                        Execute(RouterResult.Swallow);
+                    }
+                    return true;
+                }
                 if (quickHit) { QuickSwitch(); return true; }
                 return Execute(_router.OnKey(k.Scan, k.Extended, k.Down, (ushort)k.Vk));
             case HookMouseMove mv:
@@ -283,6 +293,8 @@ internal sealed class HostService : IDisposable
             }
             QuickSwitch();
             _relockOnReturn = _router.IsRemote;
+            // Stay locked on the stream PC too: only the quick-switch key brings the cursor back, not an edge.
+            if (_router.IsRemote) { _router.ToggleRemoteLock(); Execute(RouterResult.Swallow); }
             return;
         }
         _relockOnReturn = false; // unlocked on purpose
