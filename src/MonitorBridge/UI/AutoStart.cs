@@ -17,6 +17,26 @@ internal static class AutoStart
     /// <summary>Running elevated. Without it Windows blocks our injected input into elevated windows (installers, admin OBS).</summary>
     public static bool IsAdmin() => new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
 
+    /// <summary>
+    /// Starts this exe again as admin (Windows asks first). True once the new one is starting: the caller then exits,
+    /// and the new one waits for it to end before its single-instance check. False if declined or failed.
+    /// </summary>
+    public static bool RestartElevated()
+    {
+        try
+        {
+            Log.Info("restart elevated requested");
+            Process.Start(new ProcessStartInfo(Environment.ProcessPath!, $"--wait-for {Environment.ProcessId}")
+                { UseShellExecute = true, Verb = "runas" });
+            return true;
+        }
+        catch (System.ComponentModel.Win32Exception e) // 1223: the person chose "No"
+        {
+            Log.Info($"restart elevated declined ({e.NativeErrorCode})");
+            return false;
+        }
+    }
+
     /// <summary>Applies the setting, asking for elevation (UAC) when needed. Returns false if it could not be applied.</summary>
     public static bool Set(bool enabled)
     {

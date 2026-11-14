@@ -25,6 +25,8 @@ internal sealed class TrayContext : ApplicationContext
     Core.Net.PeerConnection? _lastConn;
     long _finishedAt;
     string? _clickPath; // what clicking the current balloon opens
+    bool _clickRestart; // clicking the current balloon restarts as admin
+    bool _adminNotified; // the not-admin balloon is shown once per run
     IDisposable? _pasteChannel;
     bool _asking; // one paste question at a time (several selected folders launch several requests)
     string? _peerBuild;     // what the other PC runs, once it told us on this connection
@@ -44,6 +46,12 @@ internal sealed class TrayContext : ApplicationContext
             ? $"버전: {BuildInfo.Build}"
             : $"버전: 이 PC {BuildInfo.Build} · 상대 PC {_peerBuild} (서로 달라요)";
         _icon.ContextMenuStrip.Items.Add(version);
+        // Only shown without admin rights: say so and offer the fix right there.
+        var adminLine = new ToolStripMenuItem(AdminNotice.TrayLine) { Enabled = false };
+        var adminRestart = new ToolStripMenuItem(AdminNotice.RestartText, null, (_, _) => RestartElevated());
+        _icon.ContextMenuStrip.Opening += (_, _) => adminLine.Visible = adminRestart.Visible = !AutoStart.IsAdmin();
+        _icon.ContextMenuStrip.Items.Add(adminLine);
+        _icon.ContextMenuStrip.Items.Add(adminRestart);
         _icon.ContextMenuStrip.Items.Add(limit);
         _icon.ContextMenuStrip.Items.Add(speed);
         _icon.ContextMenuStrip.Items.Add(new ToolStripSeparator());
@@ -70,6 +78,7 @@ internal sealed class TrayContext : ApplicationContext
         _icon.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left && VisibleProgress() is not null) ShowTransfer(); };
         _icon.BalloonTipClicked += (_, _) =>
         {
+            if (_clickRestart) { RestartElevated(); return; }
             if (_clickPath is null) { if (VisibleProgress() is not null) ShowTransfer(); return; }
             try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{_clickPath}\""); }
             catch (Exception e) { Log.Error(e); }
@@ -84,8 +93,12 @@ internal sealed class TrayContext : ApplicationContext
         else StartServices();
     }
 
-    public const string NotAdminNotice = "관리자 권한 없이 실행 중이라 관리자 권한 프로그램(설치·제거 창, 관리자로 켠 OBS 등)은 조작할 수 없어요. "
-        + "설정에서 '관리자 권한으로 자동 실행'을 켜고 PC를 다시 시작하거나, exe를 우클릭 → '관리자 권한으로 실행'으로 켜 주세요.";
+    /// <summary>Restart as admin; this instance exits once the new one is starting.</summary>
+    void RestartElevated()
+    {
+        if (AutoStart.RestartElevated()) Exit();
+        else Notify("관리자 권한으로 다시 켜지 않았어요.");
+    }
 
     void StartServices()
     {
@@ -99,6 +112,7 @@ internal sealed class TrayContext : ApplicationContext
                 if (paths.Count == 0) return;
                 var name = Path.GetFileName(paths[0]) + (paths.Count > 1 ? $" 외 {paths.Count - 1}개" : "");
                 _clickPath = paths[0];
+                _clickRestart = false;
                 _icon.ShowBalloonTip(5000, "Monitor Bridge", $"다 받았어요: {name} → {dest}. 누르면 폴더를 열어요.", ToolTipIcon.Info);
             };
             if (_cfg.Role == Role.Host)
@@ -118,11 +132,17 @@ internal sealed class TrayContext : ApplicationContext
                 _receiver.MessageReceived += m => { if (m is Core.Protocol.Highlight) OnUi(() => { Native.Win32.GetCursorPos(out var p); RippleWindow.Play(p.X, p.Y); }); };
                 _receiver.Start();
                 SetStatus(HostStatus.Disconnected);
-                if (!AutoStart.IsAdmin())
+            }
+            if (!AutoStart.IsAdmin() && !_adminNotified)
+            {
+                _adminNotified = true;
+                Log.Info("not elevated: admin windows (games, installers) will not see our input");
+                OnUi(() =>
                 {
-                    Log.Info("receiver is not elevated: elevated windows will ignore input");
-                    Notify(NotAdminNotice);
-                }
+                    _clickPath = null;
+                    _clickRestart = true;
+                    _icon.ShowBalloonTip(10000, "Monitor Bridge", AdminNotice.Balloon(_cfg.Role), ToolTipIcon.Warning);
+                });
             }
         }
         catch (SocketException e)
@@ -226,7 +246,7 @@ internal sealed class TrayContext : ApplicationContext
         }
     }
 
-    void Notify(string text) => OnUi(() => { _clickPath = null; _icon.ShowBalloonTip(5000, "Monitor Bridge", text, ToolTipIcon.Info); });
+    void Notify(string text) => OnUi(() => { _clickPath = null; _clickRestart = false; _icon.ShowBalloonTip(5000, "Monitor Bridge", text, ToolTipIcon.Info); });
 
     void OnUi(Action a) => _ui.Post(_ => a(), null);
 
@@ -242,7 +262,9 @@ internal sealed class TrayContext : ApplicationContext
         if (_cfg.Role == Role.Receiver || string.IsNullOrEmpty(_cfg.Password)) _settings.ShowLocalAddresses($"이 PC의 IP: {string.Join(", ", LocalAddresses())}  (게임컴 설정의 '송출컴 IP'에 넣으세요)");
         try
         {
-            if (_settings.ShowDialog() != DialogResult.OK || _settings.Result is null) return;
+            var answer = _settings.ShowDialog();
+            if (_settings.RestartRequested) { RestartElevated(); return; } // nothing saved
+            if (answer != DialogResult.OK || _settings.Result is null) return;
             var next = _settings.Result;
             if (next.AutoStart != AutoStart.IsEnabled() && !AutoStart.Set(next.AutoStart))
             {

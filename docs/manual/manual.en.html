@@ -61,7 +61,7 @@
 </section>
 <section><h2>Hotkeys</h2>
 <table><thead><tr><th>Feature</th><th>Default key</th><th>Description</th></tr></thead><tbody>
-<tr><td>Lock (가두기)</td><td><code>Scroll Lock</code></td><td>Keeps the cursor on the current PC. Press again to release. While locked the tray icon is orange and the quick-switch key is blocked</td></tr>
+<tr><td>Lock (가두기)</td><td><code>Scroll Lock</code></td><td>Keeps the cursor on the current PC. Press again to release. While locked the tray icon is orange. The quick-switch key still moves you to the other PC, and a lock made on the gaming PC comes back when you return to it</td></tr>
 <tr><td>Quick switch (빠른 전환)</td><td><code>Ctrl + Alt + `</code></td><td>Jumps to the other PC, at the spot you last left it, with a short ripple there. A ripple on the streaming PC briefly shows on the broadcast too</td></tr>
 </tbody></table>
 <ul>
@@ -125,6 +125,7 @@
 <tr><td>Limit line</td><td>Both PCs' file copy limits</td></tr>
 <tr><td>Speed line</td><td>This PC's transfer speed; if the PCs differ, both values and the one in use</td></tr>
 <tr><td>파일 전송 보기 / 파일 전송 취소</td><td>Open the progress window / stop the transfer</td></tr>
+<tr><td>권한: 관리자 아님 (not admin) line / 관리자 권한으로 다시 켜기 (restart as admin)</td><td>Shown only without admin rights. Click it, choose "Yes" in the Windows prompt, and Monitor Bridge restarts as admin</td></tr>
 </tbody></table>
 </section>
 <section><h2>Troubleshooting</h2>
@@ -134,6 +135,7 @@
 <tr><td>"두 PC의 Monitor Bridge 버전이 달라요" (versions differ)</td><td>Only one PC was updated</td><td>Keyboard and mouse keep working. Put both PCs on the same version</td></tr>
 <tr><td>Can't use the streaming PC's sign-in screen</td><td>The program starts after sign-in</td><td>Turn on auto sign-in on the streaming PC, or plug in a keyboard just to sign in</td></tr>
 <tr><td>Installer/uninstaller windows or programs like OBS ignore input</td><td>That program runs as administrator but Monitor Bridge on the streaming PC does not (for example, started by double-clicking the exe). A notice appears at start and settings show a red note</td><td>Turn on <strong>관리자 권한으로 자동 실행</strong> on the streaming PC and restart the PC, or right-click the exe → <strong>Run as administrator</strong></td></tr>
+<tr><td>Lock/quick-switch keys and cursor moves do nothing in a game (only after Alt+Tab)</td><td>Monitor Bridge on the gaming PC runs without admin rights. A notice appears at start and the tray menu and settings show it</td><td>Click <strong>관리자 권한으로 다시 켜기</strong> (restart as admin) in the notice, tray menu or settings. To do it every time, turn on auto start</td></tr>
 <tr><td>Right-click item missing</td><td>Windows 11's new menu, or the program never ran</td><td><strong>Show more options</strong> or Shift+right-click; run Monitor Bridge once</td></tr>
 <tr><td>"Monitor Bridge가 실행 중이 아니에요" (not running)</td><td>Off on that PC</td><td>Start it on that PC first</td></tr>
 <tr><td>File copy fails</td><td>Over the limit, not enough free space</td><td>Check both limits. Files are first written to a hidden folder (<code>.MonitorBridge-받는중</code>) inside the target folder, so that drive needs the space</td></tr>

@@ -35,6 +35,12 @@ static class Program
         int ripple = Array.IndexOf(args, "--render-ripple");
         if (ripple >= 0 && ripple + 1 < args.Length) { UI.RippleWindow.RenderFrames(args[ripple + 1]); return; }
 
+        // Restarted as admin: let the old instance finish exiting, or the single-instance check below would stop us.
+        if (Shared.AdminNotice.WaitForPid(args) is { } oldPid)
+        {
+            try { using var old = System.Diagnostics.Process.GetProcessById(oldPid); old.WaitForExit(10_000); }
+            catch (ArgumentException) { } // already gone
+        }
         using var mutex = new Mutex(true, "MonitorBridge.SingleInstance", out bool first);
         if (!first)
         {
