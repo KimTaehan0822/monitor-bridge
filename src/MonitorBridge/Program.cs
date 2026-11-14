@@ -35,13 +35,9 @@ static class Program
         int ripple = Array.IndexOf(args, "--render-ripple");
         if (ripple >= 0 && ripple + 1 < args.Length) { UI.RippleWindow.RenderFrames(args[ripple + 1]); return; }
 
-        // Restarted as admin: let the old instance finish exiting, or the single-instance check below would stop us.
-        if (Shared.AdminNotice.WaitForPid(args) is { } oldPid)
-        {
-            try { using var old = System.Diagnostics.Process.GetProcessById(oldPid); old.WaitForExit(10_000); }
-            catch (ArgumentException) { } // already gone
-        }
         using var mutex = new Mutex(true, "MonitorBridge.SingleInstance", out bool first);
+        // Restarted as admin: the old instance holds the mutex until its process has fully exited.
+        if (!first && Shared.AdminNotice.WaitForPid(args) is not null) first = Shared.AdminNotice.TakeOver(mutex, TimeSpan.FromSeconds(60));
         if (!first)
         {
             MessageBox.Show("Monitor Bridge가 이미 실행 중이에요. 작업 표시줄 오른쪽 아이콘을 확인해 주세요.", "Monitor Bridge");

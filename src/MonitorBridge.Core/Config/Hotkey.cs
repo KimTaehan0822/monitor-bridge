@@ -44,6 +44,18 @@ public readonly record struct Hotkey(int VirtualKey, bool Ctrl, bool Alt, bool S
         return true;
     }
 
+    /// <summary>Every physical key that can be down for this hotkey (left and right modifiers), as virtual keys.</summary>
+    public int[] PhysicalKeys()
+    {
+        var keys = new List<int>();
+        if (Ctrl) keys.AddRange(new[] { 0xA2, 0xA3 });
+        if (Alt) keys.AddRange(new[] { 0xA4, 0xA5 });
+        if (Shift) keys.AddRange(new[] { 0xA0, 0xA1 });
+        if (Win) keys.AddRange(new[] { 0x5B, 0x5C });
+        keys.Add(VirtualKey);
+        return keys.ToArray();
+    }
+
     public static string? NameOf(int vk) => Names.FirstOrDefault(kv => kv.Value == vk).Key;
 
     public override string ToString()

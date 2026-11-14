@@ -35,4 +35,33 @@ public class AdminNoticeTests
         Assert.Null(AdminNotice.WaitForPid(new[] { "--wait-for", "abc" }));
         Assert.Null(AdminNotice.WaitForPid(new[] { "--wait-for" }));
     }
+
+    [Fact]
+    public void TakeOver_WaitsPastTenSeconds_ForAnOldInstanceThatEndsLate()
+    {
+        var name = "MonitorBridge.Test." + Guid.NewGuid();
+        var held = new ManualResetEventSlim();
+        var old = new Thread(() => { var m = new Mutex(true, name); held.Set(); Thread.Sleep(300); }); // ends without releasing, like a process exit
+        old.Start();
+        held.Wait();
+        using var mutex = new Mutex(true, name, out bool first);
+        Assert.False(first);
+        Assert.True(AdminNotice.TakeOver(mutex, TimeSpan.FromSeconds(5)));
+        old.Join();
+    }
+
+    [Fact]
+    public void TakeOver_GivesUp_WhileTheOldInstanceStillRuns()
+    {
+        var name = "MonitorBridge.Test." + Guid.NewGuid();
+        var held = new ManualResetEventSlim();
+        var done = new ManualResetEventSlim();
+        var old = new Thread(() => { using var m = new Mutex(true, name); held.Set(); done.Wait(); m.ReleaseMutex(); });
+        old.Start();
+        held.Wait();
+        using var mutex = new Mutex(true, name, out bool first);
+        Assert.False(AdminNotice.TakeOver(mutex, TimeSpan.FromMilliseconds(200)));
+        done.Set();
+        old.Join();
+    }
 }

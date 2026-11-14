@@ -273,6 +273,14 @@ internal sealed class HostService : IDisposable
         {
             if (_conn is null) return; // nowhere to go; stay locked
             Unlock();
+            // Ctrl/Alt went down while the hooks were off, so the router never saw them. Tell it, so entering the
+            // stream PC releases them here; otherwise the game keeps them pressed.
+            foreach (int vk in _quick!.Hotkey.PhysicalKeys())
+            {
+                if ((Win32.GetAsyncKeyState(vk) & 0x8000) == 0) continue;
+                uint sc = Win32.MapVirtualKey((uint)vk, 4); // MAPVK_VK_TO_VSC_EX: 0xE0xx for extended keys
+                _router.OnKey((ushort)(sc & 0xFF), (sc & 0xFF00) != 0, true, (ushort)vk);
+            }
             QuickSwitch();
             _relockOnReturn = _router.IsRemote;
             return;

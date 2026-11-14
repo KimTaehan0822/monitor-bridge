@@ -20,6 +20,16 @@ internal static class AdminNotice
     public static string Settings(Role role) =>
         Problem(role) + "\n아래 버튼을 누르면 관리자 권한으로 다시 켜요. 매번 자동으로 관리자 권한으로 켜려면 위 자동 실행을 켜 두세요.";
 
+    /// <summary>
+    /// After a restart as admin: wait for the old instance to let go of the single-instance mutex (it does when its
+    /// process ends). True once this instance owns it.
+    /// </summary>
+    public static bool TakeOver(Mutex mutex, TimeSpan timeout)
+    {
+        try { return mutex.WaitOne(timeout); }
+        catch (AbandonedMutexException) { return true; } // the old process ended without releasing: ours now
+    }
+
     /// <summary>The previous instance to wait for after a restart as admin (<c>--wait-for &lt;pid&gt;</c>).</summary>
     public static int? WaitForPid(string[] args)
     {

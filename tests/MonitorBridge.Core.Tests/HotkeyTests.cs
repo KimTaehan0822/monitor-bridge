@@ -56,4 +56,13 @@ public class HotkeyTests
         m.OnKey(0xA0, true);                 // + Shift: extra modifier
         Assert.False(m.OnKey(0xC0, true));
     }
+
+    [Fact]
+    public void PhysicalKeys_ListsBothSidesOfEachModifierAndTheKey()
+    {
+        Assert.True(Hotkey.TryParse("Ctrl+Alt+Oem3", out var h));
+        Assert.Equal(new[] { 0xA2, 0xA3, 0xA4, 0xA5, 0xC0 }, h.PhysicalKeys());
+        Assert.True(Hotkey.TryParse("Shift+Win+F9", out var h2));
+        Assert.Equal(new[] { 0xA0, 0xA1, 0x5B, 0x5C, 0x78 }, h2.PhysicalKeys());
+    }
 }

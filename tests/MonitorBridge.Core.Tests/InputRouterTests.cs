@@ -205,6 +205,19 @@ public class InputRouterTests
     }
 
     [Fact]
+    public void QuickSwitch_ReleasesKeysHeldOnTheHost()
+    {
+        // Game PC was locked (no hooks): the service reports Ctrl and right Alt as held before switching.
+        var r = NewRouter();
+        r.OnKey(0x1D, false, true);
+        r.OnKey(0x38, true, true);
+        var res = r.QuickSwitch();
+        var rel = Assert.Single(res.Local.OfType<ReleaseLocalKeys>());
+        Assert.Equal(new[] { ((ushort)0x1D, false), ((ushort)0x38, true) }, rel.Keys.OrderBy(k => k.Scan));
+        Assert.True(r.OnKey(0x1D, false, false).Block); // the real key-up later stays away from the stream PC
+    }
+
+    [Fact]
     public void QuickSwitch_ReturnsToLastPosition()
     {
         var (r, _) = CrossToA();
