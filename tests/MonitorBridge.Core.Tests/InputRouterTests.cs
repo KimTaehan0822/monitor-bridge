@@ -287,17 +287,17 @@ public class InputRouterTests
     }
 
     [Fact]
-    public void RemoteLock_BlocksQuickSwitch_UntilUnlocked()
+    public void RemoteLock_QuickSwitch_LeavesAndUnlocks()
     {
         var (r, _) = CrossToA();
         r.ToggleRemoteLock();
         var res = r.QuickSwitch();
-        Assert.True(res.Block);
-        Assert.Empty(res.ToRemote);
-        Assert.Equal("stream", r.ActivePcId);
-        Assert.False(r.ToggleRemoteLock());
-        r.QuickSwitch();
+        Assert.Contains(new CursorLeave(), res.ToRemote);
         Assert.Equal("game", r.ActivePcId);
+        Assert.False(r.RemoteLocked);
+        r.QuickSwitch();                               // back to the stream PC: its lock is not restored
+        Assert.Equal("stream", r.ActivePcId);
+        Assert.False(r.RemoteLocked);
     }
 
     [Fact]

@@ -258,7 +258,7 @@ public sealed class InputRouter
 
     public RouterResult QuickSwitch()
     {
-        if (InRemoteOs) return RouterResult.Swallow; // leaving mid-drag would drop the dragged window
+        if (_dragOs) return RouterResult.Swallow; // leaving mid-drag would drop the dragged window; a lock is left (LeaveRemote unlocks)
         if (IsRemote) return LeaveRemote(LastOrCenter(_hostPcId), notifyRemote: true);
         var remote = _layout.Monitors.FirstOrDefault(m => m.Info.PcId != _hostPcId);
         if (remote is null) return RouterResult.Pass;
