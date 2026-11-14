@@ -20,7 +20,7 @@ internal sealed record HookKey(int Vk, ushort Scan, bool Extended, bool Down) : 
 internal sealed class LowLevelHooks : IDisposable
 {
     const uint MsgInvoke = Win32.WM_APP + 1;
-    const int HotkeyId = 1;
+    public const int LockHotkeyId = 1, QuickHotkeyId = 2;
 
     readonly Func<HookEvent, bool> _handler;
     readonly ConcurrentQueue<Action> _queue = new();
@@ -31,7 +31,8 @@ internal sealed class LowLevelHooks : IDisposable
     // Keep delegates alive: the OS holds raw pointers to them.
     readonly Win32.HookProc _mouseProc, _keyProc;
 
-    public event Action? HotkeyPressed;
+    /// <summary>A registered hotkey fired (its id); only used while the game PC is locked and unhooked.</summary>
+    public event Action<int>? HotkeyPressed;
     int _lastCallbackTick = Environment.TickCount;
     /// <summary>Environment.TickCount of the last hook callback (injected events included).</summary>
     public int LastCallbackTick => Volatile.Read(ref _lastCallbackTick);
@@ -75,12 +76,12 @@ internal sealed class LowLevelHooks : IDisposable
     }
 
     /// <summary>Must be called on the hook thread (inside Invoke or a handler).</summary>
-    public bool RegisterHotkey(Hotkey h) =>
-        Win32.RegisterHotKey(IntPtr.Zero, HotkeyId,
+    public bool RegisterHotkey(int id, Hotkey h) =>
+        Win32.RegisterHotKey(IntPtr.Zero, id,
             (h.Ctrl ? Win32.MOD_CONTROL : 0) | (h.Alt ? Win32.MOD_ALT : 0) | (h.Shift ? Win32.MOD_SHIFT : 0) | (h.Win ? Win32.MOD_WIN : 0) | Win32.MOD_NOREPEAT,
             (uint)h.VirtualKey);
 
-    public void UnregisterHotkey() => Win32.UnregisterHotKey(IntPtr.Zero, HotkeyId);
+    public void UnregisterHotkey(int id) => Win32.UnregisterHotKey(IntPtr.Zero, id);
 
     void Loop()
     {
@@ -91,10 +92,14 @@ internal sealed class LowLevelHooks : IDisposable
             if (msg.message == MsgInvoke)
                 while (_queue.TryDequeue(out var a)) Safe(a);
             else if (msg.message == Win32.WM_HOTKEY)
-                Safe(() => HotkeyPressed?.Invoke());
+            {
+                int id = (int)msg.wParam;
+                Safe(() => HotkeyPressed?.Invoke(id));
+            }
         }
         UninstallNow();
-        UnregisterHotkey();
+        UnregisterHotkey(LockHotkeyId);
+        UnregisterHotkey(QuickHotkeyId);
     }
 
     static void Safe(Action a)

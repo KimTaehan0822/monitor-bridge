@@ -33,6 +33,7 @@ internal sealed class HostService : IDisposable
     // Hook thread only. Off while disconnected: then every key and move goes straight to other apps.
     bool _routing, _remoteLockShown;
     bool _keysSuspended; // hook thread only: a hotkey box in the settings window is waiting for a key
+    bool _relockOnReturn; // hook thread only: left a game-PC lock with quick switch; lock again once back here
 
     public event Action<HostStatus>? StatusChanged;
     /// <summary>Show a ripple at this host OS point (raised on the hook thread).</summary>
@@ -52,7 +53,7 @@ internal sealed class HostService : IDisposable
         Win32.GetCursorPos(out var p);
         _router = new InputRouter(Layout, MonitorEnumerator.PcId, new VPoint(p.X, p.Y));
         _hooks = new LowLevelHooks(Handle);
-        _hooks.HotkeyPressed += Unlock;
+        _hooks.HotkeyPressed += OnLockedHotkey;
         _watchdog = new System.Threading.Timer(_ => CheckHooks(), null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -227,6 +228,12 @@ internal sealed class HostService : IDisposable
             _remoteLockShown = _router.RemoteLocked;
             StatusChanged?.Invoke(_remoteLockShown ? HostStatus.Locked : _conn is null ? HostStatus.Disconnected : HostStatus.Connected);
         }
+        // Back on the game PC by any path (quick switch, pushing an edge, disconnect): lock again for the game.
+        if (_relockOnReturn && !_router.IsRemote && !_locked)
+        {
+            _relockOnReturn = false;
+            Lock();
+        }
         return r.Block;
     }
 
@@ -245,19 +252,39 @@ internal sealed class HostService : IDisposable
     {
         if (_lock is null) return;
         _hooks.Uninstall();
-        if (!_hooks.RegisterHotkey(_lock.Hotkey))
+        if (!_hooks.RegisterHotkey(LowLevelHooks.LockHotkeyId, _lock.Hotkey))
         {
             _hooks.Install();
             _notify("가두기 키를 등록하지 못했어요. 다른 프로그램이 같은 키를 쓰고 있을 수 있어요.");
             return;
         }
+        // The hooks are off while locked (games), so quick switch needs its own system hotkey too.
+        if (_quick is not null && !_hooks.RegisterHotkey(LowLevelHooks.QuickHotkeyId, _quick.Hotkey))
+            _notify("가둔 동안 빠른 전환 키를 쓸 수 없어요. 다른 프로그램이 같은 키를 쓰고 있을 수 있어요.");
         _locked = true;
         StatusChanged?.Invoke(HostStatus.Locked);
     }
 
+    /// <summary>Hook thread: a system hotkey fired while the game PC is locked.</summary>
+    void OnLockedHotkey(int id)
+    {
+        if (!_locked) return;
+        if (id == LowLevelHooks.QuickHotkeyId)
+        {
+            if (_conn is null) return; // nowhere to go; stay locked
+            Unlock();
+            QuickSwitch();
+            _relockOnReturn = _router.IsRemote;
+            return;
+        }
+        _relockOnReturn = false; // unlocked on purpose
+        Unlock();
+    }
+
     void Unlock()
     {
-        _hooks.UnregisterHotkey();
+        _hooks.UnregisterHotkey(LowLevelHooks.LockHotkeyId);
+        _hooks.UnregisterHotkey(LowLevelHooks.QuickHotkeyId);
         _lock?.Reset();
         _quick?.Reset();
         // The router saw no moves while locked; start from where the cursor is now.
