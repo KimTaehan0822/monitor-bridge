@@ -10,7 +10,7 @@ Example: if your desk has `Stream 1 | Game | Stream 2`, the cursor crosses in th
 - Shared clipboard (both ways): text, images, files
 - Lock key: keep the cursor on the PC it is on (for gaming)
 - Quick-switch key: jump to the other PC with one key. A ripple at the landing spot helps you find the cursor
-- While connected and the cursor is on the gaming PC, the streaming PC's cursor is hidden (no arrow left on the broadcast)
+- While connected and the cursor is on the gaming PC, the streaming PC's cursor is hidden (no arrow left on the broadcast). Moving the streaming PC's own mouse shows it right away, and hiding can be turned off in the settings
 
 The program's screens are in Korean. Korean labels are shown below as they appear, with their meaning.
 
@@ -127,7 +127,9 @@ Once the gaming PC's mouse moves onto the streaming PC's screens, you can unplug
 | --- | --- | --- |
 | 이 PC는 (This PC is) | | 게임컴 (gaming PC, has the keyboard and mouse) or 송출컴 (streaming PC) |
 | 송출컴 IP (streaming PC IP) | | Gaming PC only. The IP shown in the streaming PC's settings |
-| 비밀번호 (password) | | Same on both PCs. Used to encrypt the connection |
+| 비밀번호 (password) | | Same on both PCs. Used to encrypt the connection. Tick **보기** (show) next to it to see the text |
+| 향상된 보안 모드 (enhanced security mode) | Off | Both PCs must have it on to connect. Stores the password encrypted and requires 8+ characters. The streaming PC blocks an address for 3 minutes after 5 wrong passwords |
+| 이 PC 커서 숨기기 (hide this PC's cursor) | On | Streaming PC only. Off = never hide the streaming PC's cursor. Even when on, moving the streaming PC's own mouse shows it right away |
 | Lock key / quick-switch key | `Scroll Lock` / ``Ctrl+Alt+` `` | Gaming PC only. Leave empty to turn the feature off |
 | File copy limit | 500MB | Up to 100,000MB. The smaller of the two PCs applies |
 | 파일 전송 속도 (file transfer speed) | 30MB/s | Up to 1,000. 0 = no limit. The smaller of the two PCs applies. **속도 기준 보기** (show speed guide) opens the guide |
@@ -163,7 +165,10 @@ The connection uses TCP port `24850`.
 | "Monitor Bridge가 실행 중이 아니에요" (not running) | Off on that PC | Start it on that PC first |
 | File copy fails | Over the limit, not enough free space | Check both limits. Files are first written to a hidden folder (`.MonitorBridge-받는중`) inside the target folder, so that drive needs the space |
 | Received files couldn't be moved into the folder | Antivirus etc. holds the file | Nothing is deleted; the files stay in the hidden folder named in the notice |
-| Streaming PC cursor is invisible | Normal while connected | It shows when the gaming PC's cursor moves over. After a crash, run Monitor Bridge again |
+| Streaming PC cursor is invisible | Normal while connected | Move the streaming PC's own mouse and it shows right away; it also shows when the gaming PC's cursor moves over. To stop hiding it, turn off **이 PC 커서 숨기기** in the settings |
+| "향상된 보안 모드를 켜 주세요" (turn on enhanced security mode) | Only one PC has enhanced security mode on | Turn it on, or off, on both PCs |
+| "비밀번호가 5번 틀려서 3분 동안 연결을 막았어요" (blocked for 3 minutes) | Wrong password 5 times in enhanced security mode | Make the passwords match, then wait 3 minutes |
+| "저장된 비밀번호를 이 PC에서 열 수 없어요" (saved password can't be opened) | A config saved in enhanced security mode was moved from another PC or Windows account | Enter the password again in the settings |
 | Keys act stuck after Ctrl+Alt+Del | Key releases can't be seen on that screen | Press and release Ctrl and Alt once |
 
 If something goes wrong, check `%AppData%\MonitorBridge\log.txt`. Settings are saved in `config.json` in the same folder.

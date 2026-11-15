@@ -7,7 +7,7 @@
 </head>
 <body>
 <h1>Monitor Bridge Manual (English)</h1>
-<p><time datetime="2026-11-14">2026-11-14 (v0.3.2)</time></p>
+<p><time datetime="2026-11-16">2026-11-16 (v0.4.0)</time></p>
 <p>A Windows program that lets one keyboard and mouse on your gaming PC also control your streaming PC. It is similar to Input Director, but you can <strong>arrange every monitor freely</strong>.</p>
 <p>Example: if your desk has <code>Stream 1 | Game | Stream 2</code>, the cursor crosses in that order. It feels like one PC with three monitors.</p>
 <ul>
@@ -15,7 +15,7 @@
 <li><p>Shared clipboard (both ways): text, images, files</p></li>
 <li><p>Lock key: keep the cursor on the PC it is on (for gaming)</p></li>
 <li><p>Quick-switch key: jump to the other PC with one key. A ripple at the landing spot helps you find the cursor</p></li>
-<li><p>While connected and the cursor is on the gaming PC, the streaming PC's cursor is hidden (no arrow left on the broadcast)</p></li>
+<li><p>While connected and the cursor is on the gaming PC, the streaming PC's cursor is hidden (no arrow left on the broadcast). Moving the streaming PC's own mouse shows it right away, and hiding can be turned off in the settings</p></li>
 </ul>
 <p>The program's screens are in Korean. Korean labels are shown below as they appear, with their meaning.</p>
 <p>Made by: <strong>김탄2</strong></p>
@@ -107,7 +107,9 @@
 <table><thead><tr><th>Item</th><th>Default</th><th>Meaning</th></tr></thead><tbody>
 <tr><td>이 PC는 (This PC is)</td><td></td><td>게임컴 (gaming PC, has the keyboard and mouse) or 송출컴 (streaming PC)</td></tr>
 <tr><td>송출컴 IP (streaming PC IP)</td><td></td><td>Gaming PC only. The IP shown in the streaming PC's settings</td></tr>
-<tr><td>비밀번호 (password)</td><td></td><td>Same on both PCs. Used to encrypt the connection</td></tr>
+<tr><td>비밀번호 (password)</td><td></td><td>Same on both PCs. Used to encrypt the connection. Tick <strong>보기</strong> (show) next to it to see the text</td></tr>
+<tr><td>향상된 보안 모드 (enhanced security mode)</td><td>Off</td><td>Both PCs must have it on to connect. Stores the password encrypted and requires 8+ characters. The streaming PC blocks an address for 3 minutes after 5 wrong passwords</td></tr>
+<tr><td>이 PC 커서 숨기기 (hide this PC's cursor)</td><td>On</td><td>Streaming PC only. Off = never hide the streaming PC's cursor. Even when on, moving the streaming PC's own mouse shows it right away</td></tr>
 <tr><td>Lock key / quick-switch key</td><td><code>Scroll Lock</code> / <code>Ctrl+Alt+`</code></td><td>Gaming PC only. Leave empty to turn the feature off</td></tr>
 <tr><td>File copy limit</td><td>500MB</td><td>Up to 100,000MB. The smaller of the two PCs applies</td></tr>
 <tr><td>파일 전송 속도 (file transfer speed)</td><td>30MB/s</td><td>Up to 1,000. 0 = no limit. The smaller of the two PCs applies. <strong>속도 기준 보기</strong> (show speed guide) opens the guide</td></tr>
@@ -140,7 +142,10 @@
 <tr><td>"Monitor Bridge가 실행 중이 아니에요" (not running)</td><td>Off on that PC</td><td>Start it on that PC first</td></tr>
 <tr><td>File copy fails</td><td>Over the limit, not enough free space</td><td>Check both limits. Files are first written to a hidden folder (<code>.MonitorBridge-받는중</code>) inside the target folder, so that drive needs the space</td></tr>
 <tr><td>Received files couldn't be moved into the folder</td><td>Antivirus etc. holds the file</td><td>Nothing is deleted; the files stay in the hidden folder named in the notice</td></tr>
-<tr><td>Streaming PC cursor is invisible</td><td>Normal while connected</td><td>It shows when the gaming PC's cursor moves over. After a crash, run Monitor Bridge again</td></tr>
+<tr><td>Streaming PC cursor is invisible</td><td>Normal while connected</td><td>Move the streaming PC's own mouse and it shows right away; it also shows when the gaming PC's cursor moves over. To stop hiding it, turn off <strong>이 PC 커서 숨기기</strong> in the settings</td></tr>
+<tr><td>"향상된 보안 모드를 켜 주세요" (turn on enhanced security mode)</td><td>Only one PC has enhanced security mode on</td><td>Turn it on, or off, on both PCs</td></tr>
+<tr><td>"비밀번호가 5번 틀려서 3분 동안 연결을 막았어요" (blocked for 3 minutes)</td><td>Wrong password 5 times in enhanced security mode</td><td>Make the passwords match, then wait 3 minutes</td></tr>
+<tr><td>"저장된 비밀번호를 이 PC에서 열 수 없어요" (saved password can't be opened)</td><td>A config saved in enhanced security mode was moved from another PC or Windows account</td><td>Enter the password again in the settings</td></tr>
 <tr><td>Keys act stuck after Ctrl+Alt+Del</td><td>Key releases can't be seen on that screen</td><td>Press and release Ctrl and Alt once</td></tr>
 </tbody></table>
 <p>If something goes wrong, check <code>%AppData%\MonitorBridge\log.txt</code>. Settings are saved in <code>config.json</code> in the same folder.</p>
