@@ -144,7 +144,7 @@ The connection uses TCP port `24850`.
 | --- | --- |
 | Teal | Connected |
 | Grey | Not connected |
-| Orange | Lock on |
+| Orange with a padlock | Lock on |
 | `버전:` line at the top of the menu | This PC's Monitor Bridge version |
 | Limit line | Both PCs' file copy limits |
 | Speed line | This PC's transfer speed; if the PCs differ, both values and the one in use |
