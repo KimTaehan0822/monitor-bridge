@@ -13,6 +13,7 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyTitle>Monitor Bridge</AssemblyTitle>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <Version>0.4.0</Version>
     <!-- Every build gets its own stamp, so two PCs can tell whether they run the same build. -->
     <InformationalVersion>$(Version)+$([System.DateTime]::Now.ToString("yyyyMMdd.HHmm"))</InformationalVersion>

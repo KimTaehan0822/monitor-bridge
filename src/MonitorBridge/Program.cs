@@ -32,6 +32,8 @@ static class Program
             RenderOffscreen(UI.TransferWindow.ForRender(() => sample), args[rt + 1]);
             return;
         }
+        int ri = Array.IndexOf(args, "--render-icon");
+        if (ri >= 0 && ri + 1 < args.Length) { RenderIcon(args[ri + 1]); return; }
         int ripple = Array.IndexOf(args, "--render-ripple");
         if (ripple >= 0 && ripple + 1 < args.Length) { UI.RippleWindow.RenderFrames(args[ripple + 1]); return; }
 
@@ -83,6 +85,32 @@ static class Program
         if (speedGuide) form.ToggleSpeedGuide();
         if (receiver) form.ShowLocalAddresses("이 PC의 IP: 172.30.1.5  (게임컴 설정의 '송출컴 IP'에 넣으세요)");
         RenderOffscreen(form, path);
+    }
+
+    /// <summary>Writes app.ico (the exe icon) and preview.png (tray states at 16/32/64 on light and dark) into a folder.</summary>
+    static void RenderIcon(string dir)
+    {
+        var teal = ColorTranslator.FromHtml("#1F8A84");
+        UI.Icons.WriteIco(Path.Combine(dir, "app.ico"), teal);
+        var states = new[] { (teal, false), (ColorTranslator.FromHtml("#C98A00"), true), (Color.Gray, false) };
+        using var sheet = new Bitmap(3 * 140, 2 * 90);
+        using var g = Graphics.FromImage(sheet);
+        for (int row = 0; row < 2; row++)
+        {
+            using var bg = new SolidBrush(row == 0 ? Color.FromArgb(243, 243, 243) : Color.FromArgb(32, 32, 32));
+            g.FillRectangle(bg, 0, row * 90, sheet.Width, 90);
+            for (int i = 0; i < 3; i++)
+            {
+                int x = i * 140 + 8;
+                foreach (int s in new[] { 16, 32, 64 })
+                {
+                    using var b = UI.Icons.Render(s, states[i].Item1, states[i].Item2);
+                    g.DrawImageUnscaled(b, x, row * 90 + (90 - s) / 2);
+                    x += s + 8;
+                }
+            }
+        }
+        sheet.Save(Path.Combine(dir, "preview.png"));
     }
 
     /// <summary>Draws a window to a PNG off screen, shown without activation so it never takes focus.</summary>

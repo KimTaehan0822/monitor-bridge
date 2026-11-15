@@ -336,20 +336,99 @@ internal sealed class TrayContext : ApplicationContext
 
 internal static class Icons
 {
-    /// <summary>Two monitors side by side; a dark bar underneath when the cursor is locked to the game PC.</summary>
+    /// <summary>Sizes in the exe icon (Explorer, taskbar, Alt+Tab at any display scale).</summary>
+    public static readonly int[] IcoSizes = { 16, 20, 24, 32, 40, 48, 64, 256 };
+
+    // Drawn on a 32x32 grid: a mouse cursor crossing between two monitors.
+    static readonly PointF[] Cursor =
+        { new(13, 9), new(13, 24), new(16.6f, 20.6f), new(19.3f, 26.4f), new(21.6f, 25.3f), new(18.9f, 19.6f), new(23.6f, 19.4f) };
+
+    /// <summary>Tray icon; a padlock badge when the cursor is locked.</summary>
     public static Icon Make(Color c, bool locked = false)
     {
-        using var bmp = new Bitmap(32, 32);
-        using (var g = Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using var b = new SolidBrush(c);
-            g.FillRectangle(b, 1, 6, 14, 12);
-            g.FillRectangle(b, 17, 6, 14, 12);
-            g.FillRectangle(b, 6, 19, 4, 3);
-            g.FillRectangle(b, 22, 19, 4, 3);
-            if (locked) g.FillRectangle(Brushes.Black, 2, 25, 28, 5);
-        }
+        using var bmp = Render(32, c, locked);
         return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    public static Bitmap Render(int size, Color c, bool locked = false)
+    {
+        var bmp = new Bitmap(size, size);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.ScaleTransform(size / 32f, size / 32f);
+        using var b = new SolidBrush(c);
+        using var screen = new Pen(c, 2.4f) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round };
+        foreach (float x in new[] { 1.5f, 18.5f })
+        {
+            using var r = RoundRect(x, 8, 12, 11, 1.8f);
+            g.DrawPath(screen, r);
+            g.FillRectangle(b, x + 4, 21, 4, 3);
+        }
+        using var outline = new Pen(Color.White, 1.2f) { LineJoin = System.Drawing.Drawing2D.LineJoin.Round };
+        g.FillPolygon(b, Cursor);
+        g.DrawPolygon(outline, Cursor);
+        if (locked)
+        {
+            using var ring = new Pen(Color.White, 1.5f);
+            using var shackle = new Pen(Color.White, 1.2f);
+            g.FillEllipse(b, 18.5f, 18.5f, 13, 13);
+            g.DrawEllipse(ring, 18.5f, 18.5f, 13, 13);
+            g.FillRectangle(Brushes.White, 22, 24, 6, 4.5f);
+            g.DrawArc(shackle, 23.3f, 21.2f, 3.4f, 3.4f, 180, 180);
+            g.DrawLine(shackle, 23.3f, 22.9f, 23.3f, 24);
+            g.DrawLine(shackle, 26.7f, 22.9f, 26.7f, 24);
+        }
+        return bmp;
+    }
+
+    static System.Drawing.Drawing2D.GraphicsPath RoundRect(float x, float y, float w, float h, float r)
+    {
+        var p = new System.Drawing.Drawing2D.GraphicsPath();
+        p.AddArc(x, y, 2 * r, 2 * r, 180, 90);
+        p.AddArc(x + w - 2 * r, y, 2 * r, 2 * r, 270, 90);
+        p.AddArc(x + w - 2 * r, y + h - 2 * r, 2 * r, 2 * r, 0, 90);
+        p.AddArc(x, y + h - 2 * r, 2 * r, 2 * r, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
+
+    /// <summary>Writes a multi-size .ico: 256 as PNG, smaller sizes as 32-bit bitmaps (what every reader understands).</summary>
+    public static void WriteIco(string path, Color c)
+    {
+        var pngs = IcoSizes.Select(s =>
+        {
+            using var bmp = Render(s, c);
+            using var ms = new MemoryStream();
+            if (s >= 256) bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+            else WriteDib(new BinaryWriter(ms), bmp);
+            return ms.ToArray();
+        }).ToArray();
+        using var w = new BinaryWriter(File.Create(path));
+        w.Write((ushort)0); w.Write((ushort)1); w.Write((ushort)pngs.Length);
+        int offset = 6 + 16 * pngs.Length;
+        for (int i = 0; i < pngs.Length; i++)
+        {
+            byte dim = (byte)(IcoSizes[i] >= 256 ? 0 : IcoSizes[i]); // 0 means 256
+            w.Write(dim); w.Write(dim); w.Write((byte)0); w.Write((byte)0);
+            w.Write((ushort)1); w.Write((ushort)32); w.Write(pngs[i].Length); w.Write(offset);
+            offset += pngs[i].Length;
+        }
+        foreach (var p in pngs) w.Write(p);
+    }
+
+    /// <summary>Icon bitmap: header with doubled height, BGRA rows bottom-up, then an all-clear AND mask (alpha does the work).</summary>
+    static void WriteDib(BinaryWriter w, Bitmap bmp)
+    {
+        int s = bmp.Width, maskRow = (s + 31) / 32 * 4;
+        w.Write(40); w.Write(s); w.Write(s * 2); w.Write((ushort)1); w.Write((ushort)32);
+        w.Write(0); w.Write(s * s * 4 + maskRow * s); w.Write(0); w.Write(0); w.Write(0); w.Write(0);
+        for (int y = s - 1; y >= 0; y--)
+            for (int x = 0; x < s; x++)
+            {
+                var p = bmp.GetPixel(x, y);
+                w.Write(p.B); w.Write(p.G); w.Write(p.R); w.Write(p.A);
+            }
+        w.Write(new byte[maskRow * s]);
+        w.Flush();
     }
 }
