@@ -71,7 +71,7 @@ internal sealed class HostService : IDisposable
 
     async Task ConnectLoop(CancellationToken ct)
     {
-        bool authWarned = false;
+        bool authWarned = false, modeWarned = false;
         while (!ct.IsCancellationRequested)
         {
             try
@@ -84,7 +84,7 @@ internal sealed class HostService : IDisposable
                     timeout.CancelAfter(TimeSpan.FromSeconds(3));
                     await tcp.ConnectAsync(_cfg.ReceiverAddress, _cfg.Port, timeout.Token);
                     timeout.CancelAfter(TimeSpan.FromSeconds(10));
-                    ch = await SecureChannel.ConnectAsync(tcp.GetStream(), _cfg.Password, timeout.Token);
+                    ch = await SecureChannel.ConnectAsync(tcp.GetStream(), _cfg.Password, timeout.Token, _cfg.EnhancedSecurity);
                 }
                 var conn = new PeerConnection(ch);
                 conn.Received += OnReceived;
@@ -98,10 +98,18 @@ internal sealed class HostService : IDisposable
                     _router.Resync(p.X, p.Y);
                     _routing = true;
                 });
-                authWarned = false;
+                authWarned = modeWarned = false;
                 Log.Info($"connected to {_cfg.ReceiverAddress}:{_cfg.Port}");
                 StatusChanged?.Invoke(_locked ? HostStatus.Locked : HostStatus.Connected);
                 await conn.RunAsync(ct);
+            }
+            catch (SecurityModeMismatchException e)
+            {
+                Log.Info(e.Message);
+                if (!modeWarned) _notify(e.PeerEnhanced
+                    ? "송출컴에서 향상된 보안 모드를 켰어요. 이 PC 설정에서도 켜 주세요."
+                    : "송출컴에서도 향상된 보안 모드를 켜 주세요. 두 PC 모두 켜야 연결돼요.");
+                modeWarned = true;
             }
             catch (AuthenticationException e)
             {

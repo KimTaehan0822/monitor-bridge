@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using MonitorBridge.Core.Layout;
 
@@ -19,6 +20,13 @@ public sealed class AppConfig
     public int FileSpeedLimitMBps { get; set; } = 30;
     public bool AutoStart { get; set; }
     public List<Placement> Placements { get; set; } = new();
+    /// <summary>Stream PC: hide its cursor while the game PC's cursor is elsewhere, so it stays out of captures.</summary>
+    public bool HideReceiverCursor { get; set; } = true;
+    /// <summary>Password sealed on disk, 8+ characters, lockout after wrong tries. Both PCs must match.</summary>
+    public bool EnhancedSecurity { get; set; }
+    public const int EnhancedMinPassword = 8;
+    /// <summary>The sealed password could not be opened here (config copied from another PC or account).</summary>
+    [JsonIgnore] public bool PasswordUnreadable { get; private set; }
 
     static readonly JsonSerializerOptions Json = new()
     {
@@ -35,7 +43,15 @@ public sealed class AppConfig
         if (!File.Exists(path)) return new AppConfig();
         try
         {
-            return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), Json) ?? new AppConfig();
+            var node = JsonNode.Parse(File.ReadAllText(path));
+            var cfg = node.Deserialize<AppConfig>(Json) ?? new AppConfig();
+            if (node?["ProtectedPassword"]?.GetValue<string>() is { Length: > 0 } sealedText)
+            {
+                var plain = PasswordVault.TryUnprotect(sealedText);
+                cfg.Password = plain ?? "";
+                cfg.PasswordUnreadable = plain is null;
+            }
+            return cfg;
         }
         catch (JsonException)
         {
@@ -48,7 +64,13 @@ public sealed class AppConfig
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var tmp = path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(this, Json));
+        var node = JsonSerializer.SerializeToNode(this, Json)!;
+        if (EnhancedSecurity)
+        {
+            node["Password"] = ""; // older builds read this one; empty makes them ask for the password
+            node["ProtectedPassword"] = PasswordVault.Protect(Password);
+        }
+        File.WriteAllText(tmp, node.ToJsonString(Json));
         File.Move(tmp, path, overwrite: true);
     }
 }

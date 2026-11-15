@@ -31,10 +31,15 @@ public sealed class SecureChannel : IAsyncDisposable
         _recvDir = (byte)(1 - sendDir);
     }
 
-    public static Task<SecureChannel> ConnectAsync(Stream s, string password, CancellationToken ct) => Handshake(s, password, isClient: true, ct);
-    public static Task<SecureChannel> AcceptAsync(Stream s, string password, CancellationToken ct) => Handshake(s, password, isClient: false, ct);
+    /// <param name="enhanced">Enhanced security mode. Both PCs must match, or both sides throw <see cref="SecurityModeMismatchException"/>.</param>
+    public static Task<SecureChannel> ConnectAsync(Stream s, string password, CancellationToken ct, bool enhanced = false) => Handshake(s, password, isClient: true, enhanced, ct);
+    public static Task<SecureChannel> AcceptAsync(Stream s, string password, CancellationToken ct, bool enhanced = false) => Handshake(s, password, isClient: false, enhanced, ct);
 
-    static async Task<SecureChannel> Handshake(Stream s, string password, bool isClient, CancellationToken ct)
+    // Normal mode keeps the original labels, so it still talks to older builds.
+    static byte[] ClientLabel(bool enhanced) => enhanced ? "client-enhanced"u8.ToArray() : "client"u8.ToArray();
+    static byte[] ServerLabel(bool enhanced) => enhanced ? "server-enhanced"u8.ToArray() : "server"u8.ToArray();
+
+    static async Task<SecureChannel> Handshake(Stream s, string password, bool isClient, bool enhanced, CancellationToken ct)
     {
         try
         {
@@ -45,20 +50,24 @@ public sealed class SecureChannel : IAsyncDisposable
             await s.ReadExactlyAsync(theirs, ct);
             var (nc, ns) = isClient ? (mine, theirs) : (theirs, mine);
             var session = HMACSHA256.HashData(master, nc.Concat(ns).ToArray());
-            var clientProof = HMACSHA256.HashData(session, "client"u8);
-            var serverProof = HMACSHA256.HashData(session, "server"u8);
+            byte[] ClientProof(bool e) => HMACSHA256.HashData(session, ClientLabel(e));
+            byte[] ServerProof(bool e) => HMACSHA256.HashData(session, ServerLabel(e));
             var proof = new byte[32];
             if (isClient)
             {
-                await s.WriteAsync(clientProof, ct);
+                await s.WriteAsync(ClientProof(enhanced), ct);
                 await s.ReadExactlyAsync(proof, ct);
-                if (!CryptographicOperations.FixedTimeEquals(proof, serverProof)) throw new AuthenticationException("비밀번호가 맞지 않아요");
+                if (CryptographicOperations.FixedTimeEquals(proof, ServerProof(!enhanced))) throw new SecurityModeMismatchException(peerEnhanced: !enhanced);
+                if (!CryptographicOperations.FixedTimeEquals(proof, ServerProof(enhanced))) throw new AuthenticationException("비밀번호가 맞지 않아요");
             }
             else
             {
                 await s.ReadExactlyAsync(proof, ct);
-                if (!CryptographicOperations.FixedTimeEquals(proof, clientProof)) throw new AuthenticationException("비밀번호가 맞지 않아요");
-                await s.WriteAsync(serverProof, ct);
+                bool mismatch = CryptographicOperations.FixedTimeEquals(proof, ClientProof(!enhanced));
+                if (!mismatch && !CryptographicOperations.FixedTimeEquals(proof, ClientProof(enhanced))) throw new AuthenticationException("비밀번호가 맞지 않아요");
+                // The password is right either way: answer so the game PC learns the modes differ, then refuse.
+                await s.WriteAsync(ServerProof(enhanced), ct);
+                if (mismatch) throw new SecurityModeMismatchException(peerEnhanced: !enhanced);
             }
             return new SecureChannel(s, HMACSHA256.HashData(session, "enc"u8), isClient ? (byte)0 : (byte)1);
         }
@@ -127,4 +136,11 @@ public sealed class SecureChannel : IAsyncDisposable
         _recvAes.Dispose();
         return _stream.DisposeAsync();
     }
+}
+
+/// <summary>The password is right, but only one of the two PCs has enhanced security mode on.</summary>
+public sealed class SecurityModeMismatchException(bool peerEnhanced)
+    : AuthenticationException(peerEnhanced ? "상대 PC만 향상된 보안 모드를 켰어요" : "이 PC만 향상된 보안 모드를 켰어요")
+{
+    public bool PeerEnhanced { get; } = peerEnhanced;
 }

@@ -12,6 +12,15 @@ internal sealed class SettingsForm : Form
     readonly TextBox _address = new() { Width = 160, PlaceholderText = "예: 192.168.0.10" };
     readonly NumericUpDown _port = new() { Minimum = 1, Maximum = 65535, Width = 80 };
     readonly TextBox _password = new() { Width = 160, UseSystemPasswordChar = true };
+    readonly CheckBox _showPassword = new() { Text = "보기", AutoSize = true };
+    readonly CheckBox _enhanced = new() { Text = "향상된 보안 모드", AutoSize = true };
+    readonly CheckBox _hideCursor = new() { Text = "게임컴 마우스가 다른 PC에 있을 때 이 PC 커서 숨기기 (방송 화면에 커서가 안 찍혀요)", AutoSize = true };
+    readonly Label _hideCursorHint = new()
+    {
+        Text = "숨겨져 있어도 이 PC 마우스를 움직이면 바로 다시 나타나요.",
+        AutoSize = true,
+        ForeColor = SystemColors.GrayText,
+    };
     readonly HotkeyBox _lockKey = new();
     readonly HotkeyBox _quickKey = new();
     public const int MaxFileLimitMB = 100_000;
@@ -86,6 +95,8 @@ internal sealed class SettingsForm : Form
         _address.Text = cfg.ReceiverAddress;
         _port.Value = cfg.Port;
         _password.Text = cfg.Password;
+        _enhanced.Checked = cfg.EnhancedSecurity;
+        _hideCursor.Checked = cfg.HideReceiverCursor;
         _lockKey.Value = cfg.LockHotkey;
         _quickKey.Value = cfg.QuickSwitchHotkey;
         _fileLimit.Value = Math.Clamp(cfg.FileSizeLimitMB, 1, MaxFileLimitMB);
@@ -125,7 +136,16 @@ internal sealed class SettingsForm : Form
         Row("이 PC는", roleBox);
         var addressRow = Inline(_address, Unit("포트"), _port);
         var addressLabel = Row("송출컴 IP", addressRow)!;
-        Row("비밀번호", Inline(_password, Unit("두 PC에 같은 비밀번호를 넣으세요")));
+        Row("비밀번호", Inline(_password, _showPassword, Unit("두 PC에 같은 비밀번호를 넣으세요")));
+        _showPassword.CheckedChanged += (_, _) => _password.UseSystemPasswordChar = !_showPassword.Checked;
+        Row("", _enhanced);
+        Row("", new Label
+        {
+            Text = "비밀번호를 암호화해서 저장하고, 8자 이상만 쓸 수 있어요. 송출컴은 같은 곳에서\n"
+                + "비밀번호가 5번 틀리면 3분 동안 연결을 막아요. 두 PC 모두 켜야 연결돼요.",
+            AutoSize = true,
+            ForeColor = SystemColors.GrayText,
+        });
         Button Clear(HotkeyBox box) { var b = new Button { Text = "지우기", AutoSize = true }; b.Click += (_, _) => box.Clear(); return b; }
         var lockRow = Inline(_lockKey, Clear(_lockKey), Unit("커서를 지금 있는 PC에 가둡니다"));
         var lockLabel = Row("가두기 키", lockRow)!;
@@ -140,6 +160,8 @@ internal sealed class SettingsForm : Form
         Row("", _guideLink);
         Row("", _speedGuide);
         _guideLink.LinkClicked += (_, _) => ToggleSpeedGuide();
+        Row("", _hideCursor);
+        Row("", _hideCursorHint);
         Row("", _autoStart);
         _adminWarn.Margin = Padding.Empty;
         _adminRestart.Margin = new Padding(0, 4, 0, 0);
@@ -197,6 +219,7 @@ internal sealed class SettingsForm : Form
         _save.Click += (_, _) => TrySave();
         foreach (var c in new Control[] { _host, _receiver, _address, _password }) c.TextChanged += (_, _) => UpdateState();
         _host.CheckedChanged += (_, _) => { ApplyRole(); UpdateState(); };
+        _enhanced.CheckedChanged += (_, _) => UpdateState();
         _lockKey.ValueChanged += UpdateState;
         _quickKey.ValueChanged += UpdateState;
         _lockKey.CapturingChanged += on => CapturingKeys?.Invoke(on);
@@ -276,6 +299,7 @@ internal sealed class SettingsForm : Form
     void ApplyRole()
     {
         foreach (var c in _hostOnly) c.Visible = _host.Checked;
+        _hideCursor.Visible = _hideCursorHint.Visible = _receiver.Checked; // only the stream PC hides its own cursor
         // Both PCs need admin rights: games (game PC) and installers / admin OBS (stream PC) ignore us otherwise.
         _adminBox.Visible = !AutoStart.IsAdmin();
         _adminWarn.Text = Shared.AdminNotice.Settings(_host.Checked ? Role.Host : Role.Receiver);
@@ -284,6 +308,8 @@ internal sealed class SettingsForm : Form
     string? Problem()
     {
         if (string.IsNullOrWhiteSpace(_password.Text)) return "비밀번호를 입력해 주세요.";
+        if (_enhanced.Checked && _password.Text.Length < AppConfig.EnhancedMinPassword)
+            return $"향상된 보안 모드에서는 비밀번호를 {AppConfig.EnhancedMinPassword}자 이상으로 정해 주세요. 상대 PC도 같은 비밀번호로 바꿔 주세요.";
         if (_host.Checked && string.IsNullOrWhiteSpace(_address.Text)) return "송출컴 IP를 입력해 주세요. 송출컴 설정 창 맨 아래에 나와 있어요.";
         // Both empty is fine: "not used" twice is not a clash.
         if (_host.Checked && _lockKey.Value.Length > 0 && _lockKey.Value == _quickKey.Value) return "가두기 키와 빠른 전환 키를 다르게 정해 주세요.";
@@ -308,6 +334,8 @@ internal sealed class SettingsForm : Form
             ReceiverAddress = _address.Text.Trim(),
             Port = (int)_port.Value,
             Password = _password.Text,
+            EnhancedSecurity = _enhanced.Checked,
+            HideReceiverCursor = _hideCursor.Checked,
             LockHotkey = _lockKey.Value,
             QuickSwitchHotkey = _quickKey.Value,
             FileSizeLimitMB = (int)_fileLimit.Value,

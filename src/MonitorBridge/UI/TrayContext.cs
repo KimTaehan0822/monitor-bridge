@@ -89,7 +89,10 @@ internal sealed class TrayContext : ApplicationContext
         _icon.Visible = true;
         _tick.Tick += (_, _) => OnTick();
         _tick.Start();
-        if (string.IsNullOrEmpty(cfg.Password)) _ui.Post(_ => ShowSettings(), null);
+        if (cfg.PasswordUnreadable)
+            Notify("저장된 비밀번호를 이 PC에서 열 수 없어요(다른 PC나 다른 윈도우 계정에서 옮겨 온 설정). 비밀번호를 다시 입력해 주세요.");
+        if (string.IsNullOrEmpty(cfg.Password) || (cfg.EnhancedSecurity && cfg.Password.Length < AppConfig.EnhancedMinPassword))
+            _ui.Post(_ => ShowSettings(), null);
         else StartServices();
     }
 
@@ -278,6 +281,8 @@ internal sealed class TrayContext : ApplicationContext
                 _cfg.FileSizeLimitMB = next.FileSizeLimitMB;
                 _cfg.FileSpeedLimitMBps = next.FileSpeedLimitMBps;
                 _cfg.AutoStart = next.AutoStart;
+                _cfg.HideReceiverCursor = next.HideReceiverCursor;
+                if (!next.HideReceiverCursor) CursorHider.Restore(); // turned off while hidden: show it now
                 if (_host is not null) _host.ApplyLayout(next.Placements);
                 else _cfg.Placements = next.Placements;
                 _cfg.Save(AppConfig.DefaultPath);
@@ -304,6 +309,7 @@ internal sealed class TrayContext : ApplicationContext
 
     static bool SameConnection(AppConfig a, AppConfig b) =>
         a.Role == b.Role && a.ReceiverAddress == b.ReceiverAddress && a.Port == b.Port && a.Password == b.Password
+        && a.EnhancedSecurity == b.EnhancedSecurity
         && a.LockHotkey == b.LockHotkey && a.QuickSwitchHotkey == b.QuickSwitchHotkey;
 
     static IEnumerable<string> LocalAddresses()
