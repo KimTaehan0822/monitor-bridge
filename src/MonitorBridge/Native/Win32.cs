@@ -77,7 +77,7 @@ internal static class Win32
 
     public delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr hMod, uint threadId);
-    [DllImport("user32.dll")] public static extern bool UnhookWindowsHookEx(IntPtr hook);
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool UnhookWindowsHookEx(IntPtr hook);
     [DllImport("user32.dll")] public static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandle(string? name);
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();

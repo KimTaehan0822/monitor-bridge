@@ -333,10 +333,10 @@ internal sealed class HostService : IDisposable
         uint lastInput = Win32.LastInputTick();
         uint lastHook = unchecked((uint)_hooks.LastCallbackTick);
         if (lastInput == 0 || unchecked((int)(lastInput - lastHook)) < 1500) return;
-        Log.Info("hooks stopped receiving input; reinstalling");
+        int unseen = unchecked((int)(lastInput - lastHook));
         _hooks.Invoke(() =>
         {
-            _hooks.Reinstall();
+            Log.Info($"hooks stopped receiving input ({unseen}ms of input unseen); reinstalling: {_hooks.Reinstall()}");
             Execute(_router.OnSessionInterrupted());
         });
     }

@@ -56,23 +56,43 @@ internal sealed class LowLevelHooks : IDisposable
 
     public void Install() => Invoke(() => { if (!Installed) Reinstall(); });
 
-    public void Uninstall() => Invoke(UninstallNow);
+    public void Uninstall() => Invoke(() => UninstallNow());
 
-    /// <summary>Hook thread only.</summary>
-    public void Reinstall()
+    /// <summary>
+    /// Hook thread only. Returns what happened to the old hooks: "removed by Windows" means a callback ran past the
+    /// system timeout; "still installed" means another program's hook kept input from reaching ours.
+    /// </summary>
+    public string Reinstall()
     {
-        UninstallNow();
+        var old = UninstallNow();
         var mod = Win32.GetModuleHandle(null);
         _mouseHook = Win32.SetWindowsHookEx(Win32.WH_MOUSE_LL, _mouseProc, mod, 0);
         _keyHook = Win32.SetWindowsHookEx(Win32.WH_KEYBOARD_LL, _keyProc, mod, 0);
         Volatile.Write(ref _lastCallbackTick, Environment.TickCount);
+        var stats = $"slowest callback since last install: {_maxLateMs}ms after the input, handler {_maxHandlerMs}ms";
+        _maxLateMs = _maxHandlerMs = 0;
+        return $"{old}; {stats}";
     }
 
-    void UninstallNow()
+    string UninstallNow()
     {
-        if (_mouseHook != IntPtr.Zero) Win32.UnhookWindowsHookEx(_mouseHook);
-        if (_keyHook != IntPtr.Zero) Win32.UnhookWindowsHookEx(_keyHook);
+        string Unhook(string name, IntPtr h) =>
+            h == IntPtr.Zero ? $"{name} none" :
+            Win32.UnhookWindowsHookEx(h) ? $"{name} still installed" : $"{name} removed by Windows (error {Marshal.GetLastWin32Error()})";
+        var r = $"{Unhook("mouse", _mouseHook)}, {Unhook("keyboard", _keyHook)}";
         _mouseHook = _keyHook = IntPtr.Zero;
+        return r;
+    }
+
+    // Diagnostics for dropped hooks (hook thread only): how late callbacks ran and how long our handler took.
+    int _maxLateMs, _maxHandlerMs;
+
+    void Measure(uint eventTime, long startTimestamp)
+    {
+        int late = unchecked(Environment.TickCount - (int)eventTime);
+        int handler = (int)System.Diagnostics.Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+        if (late > _maxLateMs && late < 60_000) _maxLateMs = late;
+        if (handler > _maxHandlerMs) _maxHandlerMs = handler;
     }
 
     /// <summary>Must be called on the hook thread (inside Invoke or a handler).</summary>
@@ -130,7 +150,10 @@ internal sealed class LowLevelHooks : IDisposable
                     Win32.WM_MOUSEHWHEEL => new HookMouseWheel(true, (short)(s.mouseData >> 16)),
                     _ => null,
                 };
-                if (e is not null && Handle(e)) return 1;
+                long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                bool block = e is not null && Handle(e);
+                Measure(s.time, t0);
+                if (block) return 1;
             }
         }
         return Win32.CallNextHookEx(_mouseHook, code, wParam, lParam);
@@ -147,7 +170,10 @@ internal sealed class LowLevelHooks : IDisposable
                 int m = (int)wParam;
                 bool down = m is Win32.WM_KEYDOWN or Win32.WM_SYSKEYDOWN;
                 var e = new HookKey((int)s.vkCode, (ushort)s.scanCode, (s.flags & Win32.LLKHF_EXTENDED) != 0, down);
-                if (Handle(e)) return 1;
+                long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                bool block = Handle(e);
+                Measure(s.time, t0);
+                if (block) return 1;
             }
         }
         return Win32.CallNextHookEx(_keyHook, code, wParam, lParam);
