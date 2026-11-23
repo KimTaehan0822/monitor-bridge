@@ -207,7 +207,13 @@ internal sealed class HostService : IDisposable
                     }
                     return true;
                 }
-                if (quickHit) { QuickSwitch(); return true; }
+                if (quickHit)
+                {
+                    // The lock follows the cursor: leaving a stream-PC lock arrives locked on the game PC.
+                    if (_router.RemoteLocked) _relockOnReturn = true;
+                    QuickSwitch();
+                    return true;
+                }
                 return Execute(_router.OnKey(k.Scan, k.Extended, k.Down, (ushort)k.Vk));
             case HookMouseMove mv:
                 if (!_router.IsRemote) return Execute(_router.OnMouseMove(mv.X, mv.Y));

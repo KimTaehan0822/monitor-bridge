@@ -77,7 +77,7 @@ Once the gaming PC's mouse moves onto the streaming PC's screens, you can unplug
 
 | Feature | Default key | Description |
 | --- | --- | --- |
-| Lock (가두기) | `Scroll Lock` | Keeps the cursor on the current PC. Press again to release. While locked the tray icon is orange. The quick-switch key still moves you to the other PC, and a lock made on the gaming PC carries over: on the stream PC only the quick-switch key brings you back, and the gaming PC is locked again. Pressing the lock key on the stream PC ends the lock completely |
+| Lock (가두기) | `Scroll Lock` | Keeps the cursor on the current PC. Press again to release. While locked the tray icon is orange. The quick-switch key still moves you to the other PC, and the lock carries over to the PC you land on, in both directions. While locked only the quick-switch key moves between PCs, and pressing the lock key again on either PC ends the lock completely |
 | Quick switch (빠른 전환) | ``Ctrl + Alt + ` `` | Jumps to the other PC, at the spot you last left it, with a short ripple there. A ripple on the streaming PC briefly shows on the broadcast too |
 
 - **Changing a key**: click a hotkey box in settings. It changes color and shows "새 키를 누르세요" (press a new key). Current hotkeys don't fire meanwhile, so just press the key you want (Esc: cancel).
